@@ -348,33 +348,10 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
         />
       </StatRow>
 
-      <div className="grid gap-6 lg:grid-cols-2 items-start [&>*]:min-w-0">
+      <div className="grid gap-6 lg:grid-cols-[3fr_2fr] items-start [&>*]:min-w-0">
         {/* Everything about the ENGAGEMENT: what the society is signed up
             for, and every deal that has run on it. */}
         <div className="space-y-6 min-w-0">
-          {society.publicSlug && (
-            <PublicPageCard
-              societyId={society.id}
-              base={publicBase}
-              slug={society.publicSlug}
-              enabled={society.publicPageEnabled}
-              hiddenCount={society.publicHiddenSections.length + (society.publicShowLeadership ? 0 : 1)}
-            />
-          )}
-          <SocietyFmCard
-            societyId={society.id}
-            spans={fmSpans.map((e) => ({
-              id: e.id,
-              companyId: e.companyId,
-              companyName: e.company.name,
-              startedOn: e.startedOn.toISOString(),
-              endedOn: e.endedOn?.toISOString() ?? null,
-              endReason: e.endReason,
-            }))}
-            companies={fmCompanies}
-            canEdit={fmCanEdit}
-            today={new Date().toISOString().slice(0, 10)}
-          />
           <Card className="p-6 min-w-0">
             <CardTitle>Service lines</CardTitle>
 
@@ -578,7 +555,10 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
           )}
         </div>
 
-        {/* Everything about WHO at the society can sign in. */}
+        {/* WHO at the society can sign in, and its public face — beside the
+            deal cards, so the two columns run to a similar length
+            (2026-11-28, user-caught). */}
+        <div className="space-y-6 min-w-0">
         <Card className="p-6 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
             <CardTitle className="mb-0">Portal accounts</CardTitle>
@@ -652,6 +632,30 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
             </details>
           )}
         </Card>
+          {society.publicSlug && (
+            <PublicPageCard
+              societyId={society.id}
+              base={publicBase}
+              slug={society.publicSlug}
+              enabled={society.publicPageEnabled}
+              hiddenCount={society.publicHiddenSections.length + (society.publicShowLeadership ? 0 : 1)}
+            />
+          )}
+          <SocietyFmCard
+            societyId={society.id}
+            spans={fmSpans.map((e) => ({
+              id: e.id,
+              companyId: e.companyId,
+              companyName: e.company.name,
+              startedOn: e.startedOn.toISOString(),
+              endedOn: e.endedOn?.toISOString() ?? null,
+              endReason: e.endReason,
+            }))}
+            companies={fmCompanies}
+            canEdit={fmCanEdit}
+            today={new Date().toISOString().slice(0, 10)}
+          />
+        </div>
       </div>
 
       {/* What the society sees under Documents in its portal — the same set,

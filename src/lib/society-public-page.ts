@@ -40,17 +40,19 @@ export type SocietyPublicPage = {
   leadership: { name: string; position: string }[];
 };
 
-/** A visit to /<slug>: null when there is no live page there. */
-export const loadSocietyPublicPage = cache(async (rawSlug: string): Promise<{ page: SocietyPublicPage } | { redirectTo: string } | null> => {
+/** A visit to /<slug>: null when there is no live page there. A hidden page
+ *  (not yet made visible, 2026-11-28) opens only for staff, as a preview. */
+export const loadSocietyPublicPage = cache(async (rawSlug: string, staff = false): Promise<{ page: SocietyPublicPage; hidden: boolean } | { redirectTo: string } | null> => {
   const typed = decodeURIComponent(rawSlug);
   const key = slugKey(typed);
   if (!key) return null;
   const s = await db.society.findUnique({ where: { publicSlugKey: key }, select: { id: true, status: true, publicSlug: true, publicPageEnabled: true } });
-  if (!s || !s.publicSlug || !s.publicPageEnabled || s.status === "terminated") return null;
+  if (!s || !s.publicSlug || s.status === "terminated") return null;
+  if (!s.publicPageEnabled && !staff) return null;
   // One address on screen: /hydepark lands on /hyde-park if that is how it is stored.
   if (typed !== s.publicSlug) return { redirectTo: `/${s.publicSlug}` };
   const page = await loadPublicPageForSociety(s.id);
-  return page ? { page } : null;
+  return page ? { page, hidden: !s.publicPageEnabled } : null;
 });
 
 /**

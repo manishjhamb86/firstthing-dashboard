@@ -363,7 +363,7 @@ model Society {
   /// looked up by, so /hydepark and /hyde-park both open the same page.
   publicSlug                    String?       @unique @map("public_slug")
   publicSlugKey                 String?       @unique @map("public_slug_key")
-  publicPageEnabled             Boolean       @default(true) @map("public_page_enabled")
+  publicPageEnabled             Boolean       @default(false) @map("public_page_enabled")
   /// Names and positions of the society's current members on its public
   /// page — on by default (the user's call, 2026-11-27); switched off for a
   /// society that does not want them shown. Never phone numbers.

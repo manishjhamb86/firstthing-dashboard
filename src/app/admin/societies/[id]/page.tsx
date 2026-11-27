@@ -25,7 +25,7 @@ import { ResetPortalPasswordButton } from "./reset-portal-password-button";
 import { EnrollServiceLineButton } from "./enroll-service-line-form";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
-import { formatDate, formatInstant, monthLabel } from "@/lib/format-date";
+import { formatDate, formatDateTime, formatInstant } from "@/lib/format-date";
 import { monitoringStart } from "@/lib/monitoring";
 import { TankLevelBar } from "@/components/tank-visual";
 import { EditSocietyForm } from "./edit-society-form";
@@ -34,7 +34,8 @@ import { NextStepCallout } from "@/components/deal-stepper";
 import type { NextAction } from "@/lib/deal-progress";
 import { bestKycAcross, kycDocumentsWanted } from "@/lib/kyc-society";
 import { SOCIETY_DOC_TYPES, societyDocuments } from "@/lib/society-documents";
-import { WithdrawButton } from "@/app/admin/documents/withdraw-button";
+import { SharedDocuments, type SharedDocItem } from "./shared-documents";
+import type { SocietyDocRow } from "@/lib/society-documents";
 
 const ALL_SERVICE_LINES = ["lighting", "pumps", "solar", "wastewater"];
 
@@ -669,59 +670,31 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
             invoices appear here, exactly as the society sees them.
           </EmptyState>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="tbl tbl-compact mt-3">
-              <thead>
-                <tr>
-                  <th>Month</th>
-                  <th>Document</th>
-                  <th>Type</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {[...(sharedDocs.agreement ? [sharedDocs.agreement] : []), ...sharedDocs.rows].map((d) => (
-                  <tr key={`${d.docType}-${d.id}`}>
-                    <td className="num whitespace-nowrap">{monthLabel(d.period)}</td>
-                    <td>
-                      <span className="font-medium">{d.title}</span>
-                      <span className="block text-xs text-[var(--text-subtle)]">{d.detail}</span>
-                    </td>
-                    <td>
-                      <StatusChip tone={SOCIETY_DOC_TYPES[d.docType]?.tone ?? "neu"}>
-                        {SOCIETY_DOC_TYPES[d.docType]?.label ?? d.docType}
-                      </StatusChip>
-                    </td>
-                    <td className="text-right whitespace-nowrap">
-                      {d.external ? (
-                        <a href={d.adminHref} target="_blank" rel="noreferrer" className="btn-secondary btn-sm">
-                          Download
-                        </a>
-                      ) : (
-                        <Link href={d.adminHref} className="btn-secondary btn-sm">
-                          Open
-                        </Link>
-                      )}
-                      {/* Only a genuine filed document (gate pass, a scanned
-                          historical report, …) can be withdrawn here — a
-                          GENERATED record (a published report, a finalised
-                          inspection) is corrected on its own screen instead
-                          (2026-10-16, user-asked: delete a gate pass filed
-                          by mistake). Same action/permission as the
-                          Documents tab's own Withdraw control. */}
-                      {d.external && d.version !== undefined && viewer?.permissions.includes("manage_pipeline") && (
-                        <div className="mt-1">
-                          <WithdrawButton documentId={d.id} version={d.version} />
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <SharedDocuments
+            agreement={sharedDocs.agreement ? toSharedItem(sharedDocs.agreement) : null}
+            rows={sharedDocs.rows.map(toSharedItem)}
+            canWithdraw={!!viewer?.permissions.includes("manage_pipeline")}
+          />
         )}
       </Card>
     </>
   );
+}
+
+/** A shared-document row as the society page's tabbed card shows it: the
+ *  gate pass with its printed time, everything else by its date. */
+function toSharedItem(d: SocietyDocRow): SharedDocItem {
+  return {
+    key: `${d.docType}-${d.id}`,
+    id: d.id,
+    period: d.period,
+    dateLabel: d.docType === "gatePass" ? formatDateTime(d.date) : formatDate(d.date),
+    title: d.title,
+    detail: d.detail,
+    typeLabel: SOCIETY_DOC_TYPES[d.docType]?.label ?? d.docType,
+    tone: SOCIETY_DOC_TYPES[d.docType]?.tone ?? "neu",
+    href: d.adminHref,
+    external: d.external,
+    version: d.version,
+  };
 }

@@ -37,18 +37,16 @@ export function PublicPageCard({
     <Card className="p-6 min-w-0">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <CardTitle className="mb-0">Public page</CardTitle>
-        <StatusChip tone={enabled ? "ok" : "neu"}>{enabled ? "Live" : "Off"}</StatusChip>
+        <StatusChip tone={enabled ? "ok" : "neu"}>{enabled ? "Visible" : "Hidden"}</StatusChip>
       </div>
       <div className="flex flex-wrap items-center gap-2 rounded-[var(--r-sm)] border px-3 py-2" style={{ borderColor: "var(--border)", background: "var(--surface-sunken)" }}>
         <span className="min-w-0 flex-1 truncate font-semibold">{url.replace(/^https?:\/\//, "")}</span>
         <button type="button" className="btn-ghost btn-sm" onClick={() => void copy()}>
           {copied ? "Copied" : "Copy link"}
         </button>
-        {enabled && (
-          <a href={`/${slug}`} target="_blank" rel="noreferrer" className="link-arrow text-[13px] font-semibold">
-            Open →
-          </a>
-        )}
+        <a href={`/${slug}`} target="_blank" rel="noreferrer" className="link-arrow text-[13px] font-semibold">
+          {enabled ? "Open →" : "Preview →"}
+        </a>
       </div>
       <p className="mt-2 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
         {hiddenCount > 0 ? `${hiddenCount} section${hiddenCount === 1 ? "" : "s"} hidden.` : "Every section shown."}

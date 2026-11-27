@@ -118,11 +118,9 @@ export function PublicPageEditor({
           <button type="button" className="btn-ghost btn-sm" onClick={() => void copy()}>
             {copied ? "Copied" : "Copy link"}
           </button>
-          {initial.enabled && (
-            <a href={`/${initial.slug}`} target="_blank" rel="noreferrer" className="link-arrow text-[13px] font-semibold">
-              Open →
-            </a>
-          )}
+          <a href={`/${initial.slug}`} target="_blank" rel="noreferrer" className="link-arrow text-[13px] font-semibold">
+            {initial.enabled ? "Open →" : "Preview →"}
+          </a>
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>
@@ -161,9 +159,9 @@ export function PublicPageEditor({
               }}
             />
             <span>
-              <span className="font-semibold">The page is live</span>
+              <span className="font-semibold">Visible to the society</span>
               <span className="block text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
-                Off: the address answers &ldquo;not found&rdquo;.
+                Off: the address answers &ldquo;not found&rdquo; to everyone outside FirsThing — staff still see a preview.
               </span>
             </span>
           </label>

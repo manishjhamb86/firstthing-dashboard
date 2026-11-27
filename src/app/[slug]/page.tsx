@@ -4,6 +4,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import { BrandMark } from "@/components/brand-mark";
 import { certificateDate, monthLabel } from "@/lib/format-date";
 import { loadSocietyPublicPage, type SocietyPublicPage } from "@/lib/society-public-page";
+import { resolveAdmin } from "@/lib/admin-permissions";
 import { PrintButton, ShareButton } from "./share-buttons";
 import styles from "./community.module.css";
 import type { PublicSectionKey } from "@/lib/public-page-sections";
@@ -21,15 +22,17 @@ export const dynamic = "force-dynamic";
 
 const n = (v: number) => Math.round(v).toLocaleString("en-IN");
 
-async function resolve(slug: string): Promise<SocietyPublicPage> {
-  const r = await loadSocietyPublicPage(slug);
+async function resolve(slug: string): Promise<SocietyPublicPage & { hiddenFromSociety: boolean }> {
+  // A page not yet made visible answers "not found" to everyone but staff.
+  const staff = !!(await resolveAdmin());
+  const r = await loadSocietyPublicPage(slug, staff);
   if (!r) notFound();
   if ("redirectTo" in r) permanentRedirect(r.redirectTo);
-  return r.page;
+  return { ...r.page, hiddenFromSociety: r.hidden };
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
-  const r = await loadSocietyPublicPage((await params).slug);
+  const r = await loadSocietyPublicPage((await params).slug, !!(await resolveAdmin()));
   if (!r || "redirectTo" in r) return { title: "FirsThing.earth" };
   const p = r.page;
   const description = `${p.name}, ${p.location} — a FirsThing Featured Community.`;
@@ -126,6 +129,11 @@ export default async function CommunityPage({ params }: { params: Promise<{ slug
 
   return (
     <div className={styles.root}>
+      {p.hiddenFromSociety && (
+        <div className={styles.staffPreview} role="status">
+          Preview — this page is hidden. Only FirsThing staff can see it. Make it visible in Societies → Public pages.
+        </div>
+      )}
       <div className={styles.top}>
         <div className={styles.wrap}>
           <span>FirsThing.earth · Featured Community</span>

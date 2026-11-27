@@ -26,7 +26,7 @@ export default async function PublicPagesList() {
     <>
       <PageHeader
         title="Public pages"
-        subtitle={`Each society's own page at ${base.replace(/^https?:\/\//, "")}/<name> — what its RWA shows residents. ${live} of ${societies.length} live.`}
+        subtitle={`Each society's own page at ${base.replace(/^https?:\/\//, "")}/<name> — what its RWA shows residents. ${live} of ${societies.length} visible to their society; the rest are hidden until made visible.`}
       />
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
@@ -56,17 +56,15 @@ export default async function PublicPagesList() {
                     </td>
                     <td className="tabular-nums">/{s.publicSlug}</td>
                     <td>
-                      <StatusChip tone={isLive ? "ok" : "neu"}>{isLive ? "Live" : s.status === "terminated" ? "Off — society closed" : "Off"}</StatusChip>
+                      <StatusChip tone={isLive ? "ok" : "neu"}>{isLive ? "Visible" : s.status === "terminated" ? "Hidden — society closed" : "Hidden"}</StatusChip>
                     </td>
                     <td className="tabular-nums">
                       {shown} of {total}
                     </td>
                     <td className="whitespace-nowrap text-right">
-                      {isLive && (
-                        <a href={`/${s.publicSlug}`} target="_blank" rel="noreferrer" className="btn-ghost btn-sm">
-                          Open
-                        </a>
-                      )}
+                      <a href={`/${s.publicSlug}`} target="_blank" rel="noreferrer" className="btn-ghost btn-sm">
+                        {isLive ? "Open" : "Preview"}
+                      </a>
                       <Link href={`/admin/public-pages/${s.id}`} className="btn-secondary btn-sm">
                         Edit
                       </Link>

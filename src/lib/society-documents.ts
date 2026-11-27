@@ -46,6 +46,9 @@ export type SocietyDocRow = {
   docType: string;
   /** YYYY-MM */
   period: string;
+  /** The document's own date (ISO): a gate pass's printed date and time, or
+   *  when it was filed, published, shared or inspected. */
+  date: string | null;
   title: string;
   detail: string;
   /** Where the society opens it. */
@@ -153,6 +156,7 @@ export async function societyDocuments(
       id: d.id,
       docType: d.docType,
       period: d.period,
+      date: (d.issuedAt ?? d.uploadedAt).toISOString(),
       title: d.fileName,
       detail: `${d.issuedAt ? `dated ${formatDateTime(d.issuedAt)} · ` : ""}filed ${formatDate(d.uploadedAt)} · ${kb(d.byteSize)}${d.version > 1 ? ` · v${d.version}` : ""}`,
       portalHref: publicS3Url(d.s3Key),
@@ -179,6 +183,7 @@ export async function societyDocuments(
         id: r.id,
         docType: "savingsReport",
         period: r.period,
+        date: r.publishedAt.toISOString(),
         title: `Monthly savings report — ${snap.circuitLabel ?? "circuit"}`,
         detail: `published ${formatDate(r.publishedAt)}${r.version > 1 ? ` · v${r.version}` : ""}`,
         portalHref: `/portal/reports/savings/${r.id}`,
@@ -191,6 +196,7 @@ export async function societyDocuments(
         id: r.id,
         docType: "demoReport",
         period: month(r.sharedAt ?? r.generatedAt),
+        date: (r.sharedAt ?? r.generatedAt).toISOString(),
         title: `Demo savings report${deals > 1 ? ` — ${dealLabel(r.pipeline.serviceLine, r.pipeline.dealScope)}` : ""}`,
         detail: `shared ${formatDate(r.sharedAt ?? r.generatedAt)} · ${r.measuredSavingsPct.toFixed(2)}% saving${r.version > 1 ? ` · v${r.version}` : ""}`,
         portalHref: `/portal/reports/demo/${r.id}`,
@@ -203,6 +209,7 @@ export async function societyDocuments(
         id: i.id,
         docType: "inspectionReport",
         period: i.period,
+        date: i.inspectedAt.toISOString(),
         title: `Inspection report — ${i.area || "whole society"}`,
         detail: `inspected ${formatDate(i.inspectedAt)} by ${i.inspectorName}`,
         portalHref: `/portal/inspection/${i.id}`,
@@ -218,6 +225,7 @@ export async function societyDocuments(
           id: `${b.id}-${i}`,
           docType: "installationPhoto",
           period: month(b.submittedAt ?? new Date()),
+          date: b.submittedAt?.toISOString() ?? null,
           title: `Installation photo — Day ${b.day}, ${b.areaKey}${keys.length > 1 ? ` (${i + 1} of ${keys.length})` : ""}${dealSuffix}`,
           detail: b.submittedAt ? `filed ${formatDate(b.submittedAt)}` : "filed",
           portalHref: publicS3Url(key),
@@ -226,7 +234,9 @@ export async function societyDocuments(
         }),
       );
     }),
-  ].sort((a, b) => (a.period < b.period ? 1 : a.period > b.period ? -1 : 0));
+  ].sort((a, b) =>
+    a.period !== b.period ? (a.period < b.period ? 1 : -1) : (b.date ?? "").localeCompare(a.date ?? ""),
+  );
 
   return { agreement, rows };
 }

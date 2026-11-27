@@ -10018,3 +10018,17 @@ Verified on dev in a browser:
 - a society with installed lights (fixture, restored afterwards) shows the lighting cards.
 
 6 new unit cases; 1,700 tests pass; `tsc` and `lint` clean.
+
+**Same day — a dedicated section, and a switch per section (user-asked: "from where can I edit each society's page?
+what to show what to not").** **Societies → Public pages** (`/admin/public-pages`) lists every society's page: its
+address, whether it is live, and how many sections are shown. Each row opens an editor (`/admin/public-pages/[id]`)
+with the address, the live switch, and one row per section. A row says what the section shows **now**, read from the
+same loader the public page renders from (`loadPublicPageForSociety`), and has its own Show switch. Rows with nothing
+to show yet ("No released month yet", "None published", "No current members") say so in amber and link to the screen
+that fixes it (Testimonials, Members). The Community story row holds the RWA's own text.
+`Society.publicHiddenSections` (migration `20261127110000_public_page_sections`; keys in
+`src/lib/public-page-sections.ts`) records what is hidden. RWA members keep their own switch. The hero, the spotlight
+card and the contact band always show. There is one Save, disabled until something changes. Editing is for
+operations; anyone else sees the settings read-only. The society page's card became a summary with a link to the
+editor. Verified on dev in a browser: hiding the story and the members took the story off the public page while the
+certificate stayed; showing them brought it back.

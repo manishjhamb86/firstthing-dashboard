@@ -6,6 +6,7 @@ import { resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
 import { logger } from "@/lib/logger";
 import { normaliseSlug, refuseSlug, slugKey } from "@/lib/society-slug";
+import { cleanHiddenSections } from "@/lib/public-page-sections";
 
 /**
  * A society's public page settings (2026-11-27): its address, whether it is
@@ -18,6 +19,8 @@ export async function savePublicPage(input: {
   enabled: boolean;
   showLeadership: boolean;
   intro: string;
+  /** Section keys to leave off the page (src/lib/public-page-sections.ts). */
+  hiddenSections: string[];
 }): Promise<{ error?: string; saved?: true; slug?: string }> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
@@ -47,6 +50,7 @@ export async function savePublicPage(input: {
       publicPageEnabled: input.enabled,
       publicShowLeadership: input.showLeadership,
       publicIntro: intro || null,
+      publicHiddenSections: cleanHiddenSections(input.hiddenSections),
       publicPagePublishedAt: society.publicPagePublishedAt ?? (input.enabled ? new Date() : null),
     },
   });
@@ -57,8 +61,11 @@ export async function savePublicPage(input: {
     slugTo: slug,
     enabled: input.enabled,
     showLeadership: input.showLeadership,
+    hiddenSections: cleanHiddenSections(input.hiddenSections),
   });
   revalidatePath(`/admin/societies/${society.id}`);
+  revalidatePath("/admin/public-pages");
+  revalidatePath(`/admin/public-pages/${society.id}`);
   if (society.publicSlug) revalidatePath(`/${society.publicSlug}`);
   revalidatePath(`/${slug}`);
   return { saved: true, slug };

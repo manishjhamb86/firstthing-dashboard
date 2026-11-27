@@ -363,6 +363,9 @@ model Society {
   /// page — on by default (the user's call, 2026-11-27); switched off for a
   /// society that does not want them shown. Never phone numbers.
   publicShowLeadership          Boolean       @default(true) @map("public_show_leadership")
+  /// Sections the back office has hidden on the public page (keys from
+  /// src/lib/public-page-sections.ts); empty shows every section.
+  publicHiddenSections          String[]      @default([]) @map("public_hidden_sections")
   /// The RWA-approved story paragraph; null shows the standard one.
   publicIntro                   String?       @map("public_intro")
   /// The date on the page's certificate of recognition.

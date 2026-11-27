@@ -6,6 +6,7 @@ import { certificateDate, monthLabel } from "@/lib/format-date";
 import { loadSocietyPublicPage, type SocietyPublicPage } from "@/lib/society-public-page";
 import { PrintButton, ShareButton } from "./share-buttons";
 import styles from "./community.module.css";
+import type { PublicSectionKey } from "@/lib/public-page-sections";
 
 /**
  * A society's public page — firsthing.earth/<slug> (2026-11-27,
@@ -60,6 +61,9 @@ const ICON = {
 export default async function CommunityPage({ params }: { params: Promise<{ slug: string }> }) {
   const p = await resolve((await params).slug);
   const since = p.partnerSince ? monthLabel(p.partnerSince) : null;
+  // What the back office has chosen to show (Societies → Public pages).
+  const show = (k: PublicSectionKey) => !p.hidden.includes(k);
+  const leadership = p.showLeadership ? p.leadership : [];
   const pumpPct =
     p.pumpRoom && p.pumpRoom.nowKwhPerKl !== null && p.pumpRoom.beforeKwhPerKl > 0
       ? Math.round(((p.pumpRoom.beforeKwhPerKl - p.pumpRoom.nowKwhPerKl) / p.pumpRoom.beforeKwhPerKl) * 100)
@@ -134,10 +138,10 @@ export default async function CommunityPage({ params }: { params: Promise<{ slug
             <BrandMark className="h-8" />
           </Link>
           <nav className={styles.nav} aria-label="On this page">
-            <a href="#initiatives">Initiatives</a>
-            {stats.length > 0 && <a href="#impact">Impact</a>}
-            <a href="#story">Community story</a>
-            <a href="#recognition">Recognition</a>
+            {show("initiatives") && <a href="#initiatives">Initiatives</a>}
+            {show("impact") && stats.length > 0 && <a href="#impact">Impact</a>}
+            {show("story") && <a href="#story">Community story</a>}
+            {show("recognition") && <a href="#recognition">Recognition</a>}
           </nav>
           <ShareButton name={p.name} className={styles.btn} />
         </div>
@@ -158,12 +162,16 @@ export default async function CommunityPage({ params }: { params: Promise<{ slug
                 sustainable place to live.
               </p>
               <div className={styles.actions}>
-                <a href="#initiatives" className={`${styles.btn} ${styles.btnLime}`}>
-                  See what&apos;s been done ↓
-                </a>
-                <a href="#recognition" className={`${styles.btn} ${styles.btnGhost}`}>
-                  View recognition
-                </a>
+                {show("initiatives") && (
+                  <a href="#initiatives" className={`${styles.btn} ${styles.btnLime}`}>
+                    See what&apos;s been done ↓
+                  </a>
+                )}
+                {show("recognition") && (
+                  <a href="#recognition" className={`${styles.btn} ${styles.btnGhost}`}>
+                    View recognition
+                  </a>
+                )}
               </div>
             </div>
             <div className={styles.photo} style={photo} role={p.buildingPhotoUrl ? "img" : undefined} aria-label={p.buildingPhotoUrl ? `${p.name}` : undefined}>
@@ -199,6 +207,7 @@ export default async function CommunityPage({ params }: { params: Promise<{ slug
         </div>
       </div>
 
+      {show("initiatives") && (
       <section className={styles.section} id="initiatives">
         <div className={styles.wrap}>
           <div className={styles.head}>
@@ -224,8 +233,9 @@ export default async function CommunityPage({ params }: { params: Promise<{ slug
           </div>
         </div>
       </section>
+      )}
 
-      {stats.length > 0 && (
+      {show("impact") && stats.length > 0 && (
         <section className={styles.impact} id="impact">
           <div className={styles.wrap}>
             <div className={styles.head}>
@@ -249,6 +259,7 @@ export default async function CommunityPage({ params }: { params: Promise<{ slug
         </section>
       )}
 
+      {show("story") && (
       <section className={styles.story} id="story">
         <div className={`${styles.wrap} ${styles.storyGrid}`}>
           <div className={styles.storyPanel} style={photo}>
@@ -291,8 +302,9 @@ export default async function CommunityPage({ params }: { params: Promise<{ slug
           </div>
         </div>
       </section>
+      )}
 
-      {p.testimonial && (
+      {show("testimonial") && p.testimonial && (
         <section className={styles.quote}>
           <div className={styles.quoteInner}>
             <div className={styles.kicker} style={{ color: "#5f7d3e" }}>
@@ -316,7 +328,7 @@ export default async function CommunityPage({ params }: { params: Promise<{ slug
         </section>
       )}
 
-      {p.leadership.length > 0 && (
+      {leadership.length > 0 && (
         <section className={styles.lead}>
           <div className={`${styles.wrap} ${styles.leadGrid}`}>
             <div>
@@ -329,7 +341,7 @@ export default async function CommunityPage({ params }: { params: Promise<{ slug
             </div>
             <div className={styles.people}>
               <h3>{p.name} · RWA leadership</h3>
-              {p.leadership.map((m) => (
+              {leadership.map((m) => (
                 <div key={`${m.name}-${m.position}`} className={styles.person}>
                   <b>{m.name}</b>
                   <span>{m.position}</span>
@@ -340,6 +352,7 @@ export default async function CommunityPage({ params }: { params: Promise<{ slug
         </section>
       )}
 
+      {show("recognition") && (
       <section className={styles.certSection} id="recognition">
         <div className={styles.wrap}>
           <div className={`${styles.center} ${styles.certIntro}`}>
@@ -374,6 +387,7 @@ export default async function CommunityPage({ params }: { params: Promise<{ slug
           </div>
         </div>
       </section>
+      )}
 
       <section className={styles.cta}>
         <div className={styles.wrap}>

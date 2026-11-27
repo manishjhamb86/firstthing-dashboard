@@ -138,6 +138,7 @@ export function AppShell({
       { href: "/admin/societies", label: "All societies", icon: Building2 },
       { href: "/admin/defaulters", label: "Defaulters", icon: Building2 },
       { href: "/admin/star-societies", label: "Star partners", icon: Building2 },
+      { href: "/admin/public-pages", label: "Public pages", icon: Building2 },
       // Asks which society first and scopes everything to it (2026-09-20).
       showPipeline && { href: "/admin/documents", label: "Documents", icon: Building2 },
       { href: "/admin/timeline", label: "Timeline", icon: Building2 },

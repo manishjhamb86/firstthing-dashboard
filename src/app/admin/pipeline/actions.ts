@@ -1,5 +1,6 @@
 "use server";
 
+import { newPublicPageFields } from "@/lib/society-slug-assign";
 import { revalidatePath } from "next/cache";
 import { notifySurveyAssigned } from "@/lib/push-notify";
 import { redirect } from "next/navigation";
@@ -130,6 +131,7 @@ export async function createLead(input: {
         dedupeKey,
         flatCount: ns.flatCount,
         status: "prospect",
+        ...(await newPublicPageFields(name)),
         ...(quickCreatedAt ? { createdAt: quickCreatedAt } : {}),
       },
     });

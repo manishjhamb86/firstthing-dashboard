@@ -14,6 +14,7 @@ import { CompactTile, KpiBubble } from "../kpi-tiles";
 import { Droplets, Lightbulb, Zap } from "lucide-react";
 import { loadSiteStock } from "@/lib/stock-workflow-loader";
 import { lightsByFitting } from "@/lib/lights-by-fitting";
+import { installedLightTotals } from "@/lib/society-lights";
 
 const CATEGORY_GROUP: Record<string, string> = { network: "Connectivity", meter: "Metering", water: "Water", cable: "Wiring", light: "Lighting" };
 
@@ -124,7 +125,7 @@ export default async function PortalInventoryPage() {
   // group; a disagreement between members takes the larger figure rather
   // than silently averaging it, so the total never reads lower than what
   // was genuinely installed.
-  const { groups: installedGroups, solo: installedSolo } = groupCircuitsByDeal(
+  const { demo: demoLights, full: fullLights, total: societyLights } = installedLightTotals(
     installedRows.map((c) => ({
       id: c.id,
       siteSurveyId: c.siteSurveyId,
@@ -132,17 +133,8 @@ export default async function PortalInventoryPage() {
       lightType: c.lightType,
       demoLights: c.demoLights,
       fullInstallation: c.representedLightCount,
-      isLive: false,
-      state: "",
     })),
   );
-  const groupFullInstallation = (g: (typeof installedGroups)[number]) =>
-    g.fullInstallationDisagreement ? Math.max(...g.fullInstallationDisagreement) : g.members[0]!.fullInstallation;
-  const demoLights = installedRows.reduce((s, c) => s + c.demoLights, 0);
-  const fullLights =
-    installedGroups.reduce((s, g) => s + groupFullInstallation(g), 0) +
-    installedSolo.reduce((s, c) => s + c.fullInstallation, 0);
-  const societyLights = fullLights + demoLights;
   const sensors = tanks.filter((t) => t.hasLevelSignal);
 
   // Per item, not one total (2026-11-23, user-asked): lights by fitting from

@@ -1,6 +1,8 @@
 import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import { SocietyFmCard } from "./fm-card";
+import { PublicPageCard } from "./public-page-card";
+import { headers } from "next/headers";
 import { CloseDealDialog, ReopenButton } from "@/components/close-deal-dialog";
 import { MarkDefaulterDialog, UnmarkDefaulterButton } from "@/components/mark-defaulter-dialog";
 import { closePreview, societyReopenBlocker } from "@/lib/deal-close-loader";
@@ -56,6 +58,12 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
     include: { pipelines: { select: { kycRequirements: { select: { pipelineId: true, type: true, status: true, updatedAt: true } } } } },
   });
   if (!society) notFound();
+  // The public page's address: firsthing.earth in production, wherever this
+  // server answers elsewhere (stage, dev), so the link shown always opens.
+  const host = (await headers()).get("host") ?? "";
+  const publicBase = /(^|\.)firsthing\.earth$/.test(host.split(":")[0]) && !host.startsWith("stage.")
+    ? "https://firsthing.earth"
+    : `${host.startsWith("localhost") ? "http" : "https"}://${host}`;
 
   // Read before rendering, not after a click — reopenBlockers can only ever
   // refuse once a rejection's own deal has a month billed and released past
@@ -348,6 +356,19 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
         {/* Everything about the ENGAGEMENT: what the society is signed up
             for, and every deal that has run on it. */}
         <div className="space-y-6 min-w-0">
+          {society.publicSlug && (
+            <PublicPageCard
+              societyId={society.id}
+              base={publicBase}
+              canEdit={!!viewer && isOperations(viewer.team)}
+              initial={{
+                slug: society.publicSlug,
+                enabled: society.publicPageEnabled,
+                showLeadership: society.publicShowLeadership,
+                intro: society.publicIntro ?? "",
+              }}
+            />
+          )}
           <SocietyFmCard
             societyId={society.id}
             spans={fmSpans.map((e) => ({

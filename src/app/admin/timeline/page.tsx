@@ -60,6 +60,8 @@ export default async function TimelineIndexPage({ searchParams }: { searchParams
         chip={withProblems > 0 ? <StatusChip tone="bad">{withProblems} with dates to fix</StatusChip> : undefined}
         action={
           <div className="flex flex-wrap items-center gap-2">
+            {/* A file download from a Route Handler, not a page — a plain <a>. */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a href="/admin/timeline/export" className="btn-outline btn-sm">
               Download all (CSV)
             </a>

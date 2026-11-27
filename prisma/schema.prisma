@@ -352,6 +352,20 @@ model Society {
   latitude                      Float?
   longitude                     Float?
   status                        SocietyStatus @default(prospect)
+  /// The society's public page, firsthing.earth/<publicSlug> (2026-11-27).
+  /// `publicSlug` is the address as shown ("hyde-park"); `publicSlugKey` is
+  /// its letters and digits only ("hydepark") — unique, and what a visit is
+  /// looked up by, so /hydepark and /hyde-park both open the same page.
+  publicSlug                    String?       @unique @map("public_slug")
+  publicSlugKey                 String?       @unique @map("public_slug_key")
+  publicPageEnabled             Boolean       @default(true) @map("public_page_enabled")
+  /// Names and positions of current RWA office-bearers — only with the
+  /// society's permission, so off until someone turns it on.
+  publicShowLeadership          Boolean       @default(false) @map("public_show_leadership")
+  /// The RWA-approved story paragraph; null shows the standard one.
+  publicIntro                   String?       @map("public_intro")
+  /// The date on the page's certificate of recognition.
+  publicPagePublishedAt         DateTime?     @map("public_page_published_at")
   /// Rejected / terminated as a whole (2026-09-25) — every open deal closed
   /// and every running contract terminated in one act, with one reason.
   closedAt                      DateTime?     @map("closed_at")

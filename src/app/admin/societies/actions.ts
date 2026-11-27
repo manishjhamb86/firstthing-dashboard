@@ -1,5 +1,6 @@
 "use server";
 
+import { newPublicPageFields } from "@/lib/society-slug-assign";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SocietyStatus } from "@prisma/client";
@@ -102,6 +103,7 @@ export async function createSociety(input: {
       dedupeKey,
       flatCount: input.flatCount,
       status: "prospect",
+        ...(await newPublicPageFields(name)),
       ...(createdAt ? { createdAt } : {}),
     },
   });

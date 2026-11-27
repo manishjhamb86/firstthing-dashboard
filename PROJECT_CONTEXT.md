@@ -9963,3 +9963,58 @@ line is a "Zoho connected / fetch failed" chip in the header. Bulk actions sit i
 selected; select-all is in the table header. Below tablet width the rows show as a stacked list. Verified on dev with
 temporary rows (removed afterwards): desktop at 1180/1440px and phone at 390px show no sideways scroll and no console
 errors. 4 new unit cases; 1,695 tests pass.
+
+## Each society has a public page at firsthing.earth/<name> (2026-11-27) — user-specified, from their own example
+
+**The ask**: a page per society at an address like `firsthing.earth/hydepark`, which anyone with the link can open. The
+RWA shows it to residents as evidence of the initiatives FirsThing carried out. The look came from the user's "Featured
+Community" HTML. The user's rule: **no rupee amount anywhere**.
+
+**The URL.** `src/app/[slug]/page.tsx` sits at the top level, beside the app's own folders. A static folder (/admin,
+/portal, /login, /field, /api, /marketing, /i…) always wins over the dynamic route. `RESERVED_SLUG_KEYS` (in
+`src/lib/society-slug.ts`) keeps every one of those words from being a society's address. A test reads `src/app` and
+fails when a new top-level folder is not reserved. A visit matches on letters and digits only (`publicSlugKey`, unique),
+so `/hydepark` and `/hyde-park` both work: the stored address ("hyde-park", `publicSlug`) is canonical and the other
+form redirects to it permanently. Addresses come from the name, with a leading "The" dropped and the rest lower case
+and hyphenated. Migration `20261127090000_society_public_page` backfilled every society this way, adding "-2" on a clash
+and "-society" on a reserved word. New societies get an address when they are created, through
+`newPublicPageFields`. The proxy needs no change: an unprotected path passes through. The stage access gate still covers
+stage.
+
+**What the page shows**, all of it from the records, through `src/lib/society-public-page.ts`:
+- name and location;
+- "partner since", from the billing start, or else the agreement's signature;
+- the initiatives in place:
+  - LED lights installed, counted by a new shared `installedLightTotals` (`src/lib/society-lights.ts`), which the
+    portal's Inventory now uses too, so the two can never disagree;
+  - the number of water tanks monitored;
+  - for pump-room automation, the percentage less electricity per kilolitre;
+- energy impact, from released months only: kWh saved, % saving, months verified, and the pump room's kWh saved;
+- the society's latest published testimonial, which already carries the member's consent, with its building photo as
+  the page photo (otherwise a monogram panel, never a stock photo of some other building);
+- RWA office-bearers by name and position only, and only when `publicShowLeadership` is on (off by default; the
+  society's permission);
+- a printable certificate of recognition dated `publicPagePublishedAt`.
+
+The page shows no rupee figures and no phone numbers. A terminated society or a page switched off answers 404. The page
+asks search engines not to index it (`robots: noindex`), because it is shared by the society rather than found by
+search.
+
+**Back office.** The society page has a "Public page" card with the link (`firsthing.earth/<address>` in production,
+otherwise this server's own address), Copy link and Open. Operations can change the address (reserved words and
+clashes are refused) and the live switch, name the office-bearers, and give the RWA's own story paragraph
+(`savePublicPage`, logged). Adding the root dynamic route made the `no-html-link-for-pages` lint rule flag the
+timeline's CSV download link. That link is a route handler, so it keeps a plain `<a>`, marked as such.
+
+**The domain.** `firsthing.earth/<address>` works once `firsthing.earth` is served by this app (the DNS / reverse-proxy
+cutover, still a separate infra step). Until then the same page answers on whichever host serves the app.
+
+Verified on dev in a browser:
+- signed out, the page opens with no "₹" anywhere;
+- `/adityaurbancasa` redirects to `/aditya-urban-casa`;
+- an unknown address gives 404, and `/admin` still sends you to sign in;
+- there is no sideways scroll at 390px;
+- the admin card refuses "admin", saves a new address, and the joined form of the new address opens it;
+- a society with installed lights (fixture, restored afterwards) shows the lighting cards.
+
+6 new unit cases; 1,700 tests pass; `tsc` and `lint` clean.

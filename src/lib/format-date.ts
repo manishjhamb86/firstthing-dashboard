@@ -214,3 +214,10 @@ function asDate(d: Date | string | null | undefined): Date | null {
   const date = typeof d === "string" ? new Date(d.length === 10 ? `${d}T00:00:00Z` : d) : d;
   return Number.isNaN(date.getTime()) ? null : date;
 }
+
+/** "26 November 2026" — a certificate's date, written out in full. */
+export function certificateDate(d: Date | string | null | undefined): string {
+  const date = asDate(d);
+  if (!date) return "—";
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", ...UTC });
+}

@@ -9943,3 +9943,23 @@ alone). The live monitoring page has a 24-hour / 12-hour switch (operations lead
 at once); the registry's edit form re-checks them too when working hours change; the readings list labels an invalid
 12-hour day "Too few hours — 7h (12-hour circuit: 8–15)" / "Too many hours — 16h …". Verified on dev with 181 real
 hourly days: 24-hour 14 valid; 12-hour exactly the 2 days with 8–15 hours valid, 0 misclassified; back to 24 restores.
+
+## The invoice intake list redesigned (2026-11-27) — user-asked, designed first
+
+Designed on the canvas "Invoice intake listing" (https://claude.ai/artifact/GrQrppFUKtnCoisxzCrAAx), then built on
+`/admin/billing/intake`. **Five tabs replace the thirteen chips** (`INTAKE_TABS` in `src/lib/intake-list.ts`): To do
+(not read, could not read, duplicate, needs review, ready, sent back) · Awaiting release · Released (superseded included)
+· Filed as document · All. The list opens on To do, which is always the same tab, so it stays predictable (2026-09-24's
+reason for opening on All). Under To do, its parts are small sub-chips, shown only when they hold something, so the error rows keep a filter of their own.
+`?view=` still accepts the old view keys. **Overdue only** is a red toggle on the tab row and answers across every tab.
+Rows are **grouped by the confirmed month**, with each heading giving the count and total; rows with no month yet come first.
+The Month column is gone, so full society names fit. **The status column is one cell**: the stage chip plus the payment
+chip. A released bill that is past due reads "Unpaid · N days overdue": `daysPastDue` uses the live bill's due date, or the
+review's. The payment chip is dropped while a bill is only attached, because the stage already says so. The Uploaded
+column became **Due**, sortable and red when overdue. Totals drop a trailing ".00" and use regular tabular digits.
+Row actions are short: Read / Retry + By hand, Review / Submit, Open month →. **The drop zone is one slim strip**
+with Upload PDFs, and files can be dropped anywhere on the page (a page-wide overlay shows while dragging). The Zoho
+line is a "Zoho connected / fetch failed" chip in the header. Bulk actions sit in a bar that appears once rows are
+selected; select-all is in the table header. Below tablet width the rows show as a stacked list. Verified on dev with
+temporary rows (removed afterwards): desktop at 1180/1440px and phone at 390px show no sideways scroll and no console
+errors. 4 new unit cases; 1,695 tests pass.

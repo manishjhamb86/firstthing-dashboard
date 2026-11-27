@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { formatInstant, monthLabel, timeAgo } from "@/lib/format-date";
 import { Card, PageHeader, StatusChip, type ChipTone } from "@/components/ui";
 import { requireBillingOps } from "../access";
-import { intakeViewOf, submittedDisplayStatus } from "@/lib/intake-list";
+import { daysPastDue, submittedDisplayStatus } from "@/lib/intake-list";
 import { CALCULATION_STATUS } from "@/lib/status-maps";
 import { retailInvoiceSettled } from "@/lib/retail-customer";
 import { IntakeClient, type IntakeRow } from "./intake-client";
@@ -52,8 +52,8 @@ const STATUS_META: Record<string, { label: string; tone: ChipTone }> = {
 // reported, screenshot). "warning" keeps the SAME red emphasis as plain
 // "overdue" here — the finer distinction is what the detail page is for.
 const PAYMENT_STATUS_COMPACT: Record<string, { label: string; tone: ChipTone }> = {
-  attached: { label: "Not released", tone: "info" },
-  released: { label: "Pending", tone: "warn" },
+  // attached: no chip — the stage chip beside it already says "Awaiting release".
+  released: { label: "Unpaid", tone: "warn" },
   overdue: { label: "Overdue", tone: "bad" },
   warning: { label: "Overdue", tone: "bad" },
   suspended: { label: "Suspended", tone: "bad" },
@@ -97,10 +97,12 @@ export default async function IntakePage({
   const liveInvoices = calcIds.length
     ? await db.billingInvoice.findMany({
         where: { monthlyCalculationId: { in: calcIds }, voidedAt: null },
-        select: { monthlyCalculationId: true, status: true },
+        select: { monthlyCalculationId: true, status: true, dueDate: true },
       })
     : [];
   const paymentStatusByCalc = new Map(liveInvoices.map((inv) => [inv.monthlyCalculationId, inv.status]));
+  const dueByCalc = new Map(liveInvoices.map((inv) => [inv.monthlyCalculationId, inv.dueDate.toISOString().slice(0, 10)]));
+  const today = new Date();
   const retailIds = intakes.filter((i) => i.retailInvoiceId).map((i) => i.retailInvoiceId!);
   const retailInvoices = retailIds.length
     ? await db.retailInvoice.findMany({
@@ -141,6 +143,7 @@ export default async function IntakePage({
       paid?: string | null;
       societyId?: string | null;
       period?: string;
+      dueDate?: string | null;
     } | null;
     let status: string = i.status === "reading" && i.uploadedAt < staleBefore ? "uploaded" : i.status;
     if (status === "submitted" && i.retailInvoiceId) {
@@ -151,8 +154,15 @@ export default async function IntakePage({
       const calcStatus = i.monthlyCalculationId ? calcStatusById.get(i.monthlyCalculationId) : undefined;
       status = submittedDisplayStatus(calcStatus);
     }
+    const dueDate =
+      (i.monthlyCalculationId ? dueByCalc.get(i.monthlyCalculationId) : undefined) ??
+      (review?.dueDate && /^\d{4}-\d{2}-\d{2}/.test(review.dueDate) ? review.dueDate.slice(0, 10) : null);
+    const liveStatus = i.monthlyCalculationId ? paymentStatusByCalc.get(i.monthlyCalculationId) : undefined;
+    const compact = liveStatus ? PAYMENT_STATUS_COMPACT[liveStatus] : undefined;
+    const lateDays = compact?.tone === "bad" ? daysPastDue(dueDate, today) : 0;
     return {
       id: i.id,
+      dueDate,
       fileName: i.fileName,
       fileSize: i.fileSize,
       status,
@@ -195,36 +205,42 @@ export default async function IntakePage({
       // so it's simply Paid or Unpaid.
       paymentStatus: i.retailInvoiceId
         ? { label: retailSettledByInvoice.get(i.retailInvoiceId) ? "Paid" : "Unpaid", tone: retailSettledByInvoice.get(i.retailInvoiceId) ? "ok" : "warn" }
-        : i.monthlyCalculationId && paymentStatusByCalc.has(i.monthlyCalculationId)
-          ? PAYMENT_STATUS_COMPACT[paymentStatusByCalc.get(i.monthlyCalculationId)!]
+        : compact
+          ? lateDays > 0 && liveStatus !== "suspended"
+            ? { label: `Unpaid · ${lateDays} day${lateDays === 1 ? "" : "s"} overdue`, tone: "bad" }
+            : compact
           : null,
     };
   });
 
-  // The header's count reads the same rule as the chips (src/lib/intake-list).
-  const needsReview = rows.filter((r) => intakeViewOf(r.status) === "review").length;
   const zoho = await db.zohoInvoiceConfig.findUnique({ where: { id: "singleton" }, select: { enabled: true, lastSyncAt: true, lastSyncSummary: true, lastError: true } });
 
   return (
     <>
       <PageHeader
         title="Invoice intake"
-        subtitle="Drop this month's Zoho invoices — or the whole backfill. Each file becomes a row; confirm the row and it goes to the accountant."
-        chip={needsReview > 0 ? <StatusChip tone="warn">{needsReview} need review</StatusChip> : undefined}
+        subtitle={
+          zoho?.enabled ? (
+            <span className="flex flex-wrap items-center gap-2">
+              <StatusChip tone={zoho.lastError ? "bad" : "ok"}>{zoho.lastError ? "Zoho fetch failed" : "Zoho connected"}</StatusChip>
+              <span style={{ color: zoho.lastError ? "var(--bad-fg)" : undefined }}>
+                {zoho.lastSyncAt ? `Last fetched ${timeAgo(zoho.lastSyncAt)}` : "Not fetched yet"}
+                {zoho.lastError || zoho.lastSyncSummary ? ` · ${zoho.lastError ?? zoho.lastSyncSummary}` : ""}
+              </span>
+            </span>
+          ) : (
+            "Drop this month's invoices, confirm each row, and it goes to the accountant."
+          )
+        }
         action={
           <div className="flex flex-wrap items-center gap-2">
-            {zoho?.enabled && <ZohoFetchButton />}
             <Link href="/admin/billing/close" className="btn-ghost">
-              Monthly close
+              Monthly close →
             </Link>
+            {zoho?.enabled && <ZohoFetchButton />}
           </div>
         }
       />
-      {zoho?.enabled && (zoho.lastSyncAt || zoho.lastError) && (
-        <p className="-mt-4 mb-5 text-[12.5px]" style={{ color: zoho.lastError ? "var(--bad-fg)" : "var(--text-muted)" }}>
-          Zoho{zoho.lastSyncAt ? `, last fetched ${timeAgo(zoho.lastSyncAt)}` : ""}: {zoho.lastError ?? zoho.lastSyncSummary}
-        </p>
-      )}
       <IntakeClient rows={rows} initialFilters={filters} canRelease={gate.actor.permissions.includes("release_billing")} />
       <Card className="mt-5 p-5 text-[12.5px]" >
         <p style={{ color: "var(--text-muted)" }}>

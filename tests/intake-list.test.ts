@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  daysPastDue,
+  intakeFilterMatches,
+  intakeTabOf,
+  tabOfFilter,
   compareIntakes,
   initialSortDir,
   intakeMatches,
@@ -159,5 +163,34 @@ describe("intake list filters in the URL", () => {
     expect(intakeListReturnHref("/admin/billing/intake?view=review")).toBe("/admin/billing/intake?view=review");
     expect(intakeListReturnHref("https://evil.example/")).toBe("/admin/billing/intake");
     expect(intakeListReturnHref(null)).toBe("/admin/billing/intake");
+  });
+});
+
+describe("the list's tabs (2026-11-27)", () => {
+  it("puts every waiting state under To do and superseded under Released", () => {
+    expect(intakeTabOf("unread")).toBe("todo");
+    expect(intakeTabOf("failed")).toBe("todo");
+    expect(intakeTabOf("sent_back")).toBe("todo");
+    expect(intakeTabOf("awaiting_release")).toBe("awaiting");
+    expect(intakeTabOf("superseded")).toBe("released");
+    expect(intakeTabOf("filed")).toBe("filed");
+  });
+  it("matches a tab, a To-do sub-view, and All", () => {
+    expect(intakeFilterMatches("review", "todo")).toBe(true);
+    expect(intakeFilterMatches("review", "failed")).toBe(false);
+    expect(intakeFilterMatches("released", "all")).toBe(true);
+    expect(tabOfFilter("failed")).toBe("todo");
+    expect(tabOfFilter("released")).toBe("released");
+  });
+  it("opens on To do and still reads an old sub-view link", () => {
+    expect(DEFAULT_INTAKE_FILTERS.view).toBe("todo");
+    expect(parseIntakeFilters({ view: "awaiting" }).view).toBe("awaiting");
+    expect(parseIntakeFilters({ view: "failed" }).view).toBe("failed");
+  });
+  it("counts whole days past due, never negative", () => {
+    const today = new Date("2026-11-27T10:00:00Z");
+    expect(daysPastDue("2026-11-15", today)).toBe(12);
+    expect(daysPastDue("2026-12-01", today)).toBe(0);
+    expect(daysPastDue(null, today)).toBe(0);
   });
 });

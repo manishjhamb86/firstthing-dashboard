@@ -7,12 +7,17 @@ import { Card, ErrorText, StatusChip, type ChipTone } from "@/components/ui";
 import { Modal } from "@/components/modal";
 import { sniffKind } from "@/lib/file-signature";
 import { isZip, readZip } from "@/lib/zip-browser";
-import { formatInstant } from "@/lib/format-date";
+import { formatDate, formatInstant } from "@/lib/format-date";
 import {
   compareIntakes,
   INTAKE_SORTS,
+  INTAKE_TABS,
   INTAKE_VIEWS,
+  TODO_VIEWS,
   initialSortDir,
+  intakeFilterMatches,
+  intakeTabOf,
+  tabOfFilter,
   intakeMatches,
   intakeViewOf,
   intakeFiltersQuery,
@@ -20,6 +25,7 @@ import {
   INTAKE_LIST_RETURN_KEY,
   type IntakeFilters,
   type IntakeSortKey,
+  type IntakeTab,
   type IntakeView,
 } from "@/lib/intake-list";
 import { READ_CUT_OFF_MESSAGE } from "@/lib/intake-read-error";
@@ -70,12 +76,15 @@ export type IntakeRow = {
    *  document copy with no payment lifecycle). Service-line overdue states
    *  all ring "bad" — the user's "overdue invoices clearly visible in red". */
   paymentStatus: { label: string; tone: ChipTone } | null;
+  /** `YYYY-MM-DD` — the live bill's due date, else the review's. */
+  dueDate: string | null;
 };
 
-type View = IntakeView | "all";
+type View = IntakeView | IntakeTab;
 
+// No ".00" on a whole-rupee total (2026-11-27 redesign); paise only when there are some.
 function inr(n: number): string {
-  return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: n % 1 === 0 ? 0 : 2, minimumFractionDigits: n % 1 === 0 ? 0 : 2 })}`;
 }
 
 /**
@@ -99,9 +108,9 @@ export function IntakeClient({
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  // All, by default (2026-09-24, user-asked) — with seven chips now naming
-  // real, distinct states, opening on whichever happens to have work first
-  // read as an unpredictable landing page more than a helpful default.
+  // Opens on To do (2026-11-27 redesign) — always the same tab, so the
+  // landing page stays predictable (2026-09-24's reason for opening on All),
+  // and it is the one that holds work.
   // Starting values come from the URL (the page parses them), so a return
   // from a review lands on the same filtered list (user-reported 2026-09-25).
   const [view, setView] = useState<View>(initialFilters.view);
@@ -399,8 +408,9 @@ export function IntakeClient({
     );
   }, [rows, query, societyFilter, monthFilter]);
 
+  // Every view's count, under the search/society/month narrowing.
   const counts = useMemo(() => {
-    const c: Record<View, number> = {
+    const c: Record<IntakeView, number> = {
       unread: 0,
       failed: 0,
       duplicate: 0,
@@ -411,7 +421,6 @@ export function IntakeClient({
       awaiting_release: 0,
       released: 0,
       superseded: 0,
-      all: narrowed.length,
     };
     for (const r of narrowed) {
       const v = intakeViewOf(r.status);
@@ -419,21 +428,48 @@ export function IntakeClient({
     }
     return c;
   }, [narrowed]);
+  const tabCount = (t: IntakeTab): number =>
+    t === "all" ? narrowed.length : narrowed.filter((r) => intakeTabOf(intakeViewOf(r.status)) === t).length;
 
   // "Overdue" means the LIVE payment status is one of overdue/warning/
-  // suspended — the "bad" tone on BILLING_INVOICE_STATUS (page.tsx). A
-  // retail sale's "Unpaid" is tone "warn", not "bad" — it has no CON-13
-  // arrears clock, so it never counts as overdue here either.
+  // suspended — the "bad" tone (page.tsx). A retail sale's "Unpaid" is
+  // tone "warn", not "bad" — it has no arrears clock, so it never counts.
   const overdueCount = useMemo(() => narrowed.filter((r) => r.paymentStatus?.tone === "bad").length, [narrowed]);
 
+  // Overdue is answered across every tab: an overdue bill is released, and
+  // asking for it from To do must not show nothing.
   const visible = useMemo(
     () =>
       narrowed
-        .filter((r) => view === "all" || intakeViewOf(r.status) === view)
-        .filter((r) => !overdueOnly || r.paymentStatus?.tone === "bad")
+        .filter((r) => (overdueOnly ? r.paymentStatus?.tone === "bad" : intakeFilterMatches(intakeViewOf(r.status), view)))
         .sort(compareIntakes(sortKey, sortDir)),
     [narrowed, view, overdueOnly, sortKey, sortDir],
   );
+
+  // Rows grouped by their confirmed month (2026-11-27 redesign) — the month
+  // column is gone, so the full society name has the room. Rows with no
+  // month yet come first: they are the ones still waiting on someone.
+  const groups = useMemo(() => {
+    const byKey = new Map<string, IntakeRow[]>();
+    for (const r of visible) {
+      const k = r.periodKey ?? "";
+      const list = byKey.get(k);
+      if (list) list.push(r);
+      else byKey.set(k, [r]);
+    }
+    const monthDir = sortKey === "period" ? sortDir : -1;
+    return [...byKey.entries()]
+      .sort(([a], [b]) => (a === "" ? -1 : b === "" ? 1 : a === b ? 0 : (a > b ? 1 : -1) * monthDir))
+      .map(([key, list]) => {
+        const total = list.reduce((s, r) => s + (r.total ?? 0), 0);
+        return {
+          key,
+          label: key ? (list[0].period ?? key) : "Month not confirmed",
+          summary: `${list.length} invoice${list.length === 1 ? "" : "s"}${total > 0 ? ` · ${inr(total)}` : ""}`,
+          rows: list,
+        };
+      });
+  }, [visible, sortKey, sortDir]);
 
   const societies = useMemo(() => [...new Set(rows.map((r) => r.society).filter((s): s is string => !!s))].sort(), [rows]);
   const months = useMemo(
@@ -441,7 +477,7 @@ export function IntakeClient({
       [...new Map(rows.filter((r) => r.periodKey).map((r) => [r.periodKey!, r.period!])).entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)),
     [rows],
   );
-  const filtering = query.trim() !== "" || societyFilter !== "" || monthFilter !== "" || overdueOnly;
+  const filtering = query.trim() !== "" || societyFilter !== "" || monthFilter !== "";
 
   // A row is selectable when it can take at least one bulk action; "select
   // all" means the actionable rows currently on screen, not every row in
@@ -464,124 +500,275 @@ export function IntakeClient({
     setSortDir(initialSortDir(key));
   }
 
-  const chip = (key: View, label: string, n: number) => (
-    <button
-      key={key}
-      type="button"
-      onClick={() => setView(key)}
-      className="rounded-full border px-3.5 py-1.5 text-xs font-semibold"
-      style={
-        view === key
-          ? { background: "var(--chrome)", borderColor: "var(--chrome)", color: "var(--chrome-text)" }
-          : { background: "var(--surface)", borderColor: "var(--border)", color: "var(--text-muted)" }
-      }
-    >
-      {label} <span className="num opacity-80">{n}</span>
-    </button>
-  );
+  const activeTab = tabOfFilter(view);
+  const tabMeta = INTAKE_TABS.find((t) => t.key === activeTab)!;
+  const todoSubViews = INTAKE_VIEWS.filter((v) => TODO_VIEWS.includes(v.key) && counts[v.key] > 0);
+  const pickTab = (t: IntakeTab) => {
+    setView(t);
+    setOverdueOnly(false);
+  };
+
+  // Drop anywhere on the page (2026-11-27 redesign): the slim strip names
+  // it, and a page-wide overlay shows while files are held over the window.
+  const handleFilesRef = useRef(handleFiles);
+  useEffect(() => {
+    handleFilesRef.current = handleFiles;
+  });
+  useEffect(() => {
+    const hasFiles = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files");
+    const over = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      setDragging(true);
+    };
+    const leave = (e: DragEvent) => {
+      if (!e.relatedTarget) setDragging(false);
+    };
+    const drop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      setDragging(false);
+      if (e.dataTransfer?.files.length) void handleFilesRef.current(e.dataTransfer.files);
+    };
+    window.addEventListener("dragover", over);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("drop", drop);
+    };
+  }, []);
+
+  function actionFor(r: IntakeRow) {
+    const reviewHref = `/admin/billing/intake/${r.id}`;
+    return (
+      <>
+                          {r.status.startsWith("submitted") && r.calculationId ? (
+                            <Link href={`/admin/billing/${r.calculationId}`} className="link-arrow text-[13px] font-semibold">
+                              Open month →
+                            </Link>
+                          ) : r.status === "submitted_retail" && r.retailCustomerId ? (
+                            <Link href={`/admin/retail-customers/${r.retailCustomerId}`} className="link-arrow text-[13px] font-semibold">
+                              View customer →
+                            </Link>
+                          ) : (r.status === "submitted_filed_document" || r.status === "submitted_filed_released") && r.filedDocumentId ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <Link href={`/admin/documents/${r.filedDocumentId}`} className="link-arrow text-[13px] font-semibold">
+                                View document →
+                              </Link>
+                              {/* Only while still unreleased — once a society
+                                  has it, the way back is its own page. */}
+                              {r.status === "submitted_filed_document" && (
+                                <button
+                                  type="button"
+                                  className="btn-ghost btn-sm"
+                                  onClick={() => {
+                                    setUnfileTarget({ id: r.id, fileName: r.invoiceNumber ?? r.fileName });
+                                    setUnfileReason("");
+                                    setUnfileError(null);
+                                  }}
+                                >
+                                  Unfile
+                                </button>
+                              )}
+                            </span>
+                          ) : r.status === "reading" || r.status === "uploaded" || r.status === "could_not_read" ? (
+                            // One fixed-width button for all three states, so
+                            // "Read" turning into "Reading…" never moves a column.
+                            <span className="inline-flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                className="btn-secondary btn-sm w-[92px] shrink-0"
+                                disabled={r.status === "reading" || retrying.has(r.id)}
+                                onClick={() => void retry(r.id, r.status === "uploaded")}
+                              >
+                                {r.status === "reading" || retrying.has(r.id) ? "Reading…" : r.status === "uploaded" ? "Read" : "Retry"}
+                              </button>
+                              <Link href={reviewHref} className="btn-ghost btn-sm">
+                                By hand
+                              </Link>
+                            </span>
+                          ) : (
+                            <Link href={reviewHref} className="btn-secondary btn-sm">
+                              {r.status === "ready" ? "Submit" : "Review"}
+                            </Link>
+                          )}
+      </>
+    );
+  }
+
+  const emptyText =
+    rows.length === 0
+      ? "Nothing in flight. Drop this month's invoices, or the whole backfill — one file per invoice."
+      : filtering && narrowed.length > 0
+        ? `No invoice matches under this tab — ${narrowed.length} match under All.`
+        : filtering
+          ? "No invoice matches."
+          : overdueOnly
+            ? "No invoice is overdue."
+            : (INTAKE_VIEWS.find((v) => v.key === view)?.empty ?? tabMeta.empty);
 
   return (
     <>
-      <Card className="mb-4 p-2">
+      {dragging && (
         <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragging(false);
-            void handleFiles(e.dataTransfer.files);
-          }}
-          onClick={() => inputRef.current?.click()}
-          className="flex cursor-pointer flex-col items-center gap-2 rounded-[var(--r-sm)] border-[1.5px] border-dashed px-4 py-4 text-center sm:py-7"
-          style={{
-            borderColor: dragging ? "var(--accent)" : "var(--field-border)",
-            background: dragging ? "var(--accent-subtle)" : "var(--surface-sunken)",
-          }}
+          aria-hidden
+          className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ background: "color-mix(in srgb, var(--accent) 12%, transparent)" }}
         >
-          <input
-            ref={inputRef}
-            type="file"
-            accept="application/pdf,application/zip,.zip"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files) void handleFiles(e.target.files);
-              e.target.value = "";
-            }}
-          />
-          <p className="font-semibold">Drop invoice PDFs — one, many, or a zip of them</p>
-          <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-            Each PDF starts its own row as soon as it lands; a zip is opened here and its PDFs join the drop. Up to 20 MB each.
-          </p>
-          {inFlight.length > 0 && (
-            <p className="text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
-              Uploading and reading {inFlight.length} file{inFlight.length === 1 ? "" : "s"}…
-            </p>
-          )}
-          {archiveNotes.length > 0 && (
-            <div className="mt-1 w-full max-w-xl text-left text-[12.5px]" style={{ color: "var(--text-muted)" }}>
-              {archiveNotes.map((n) => (
-                <p key={n}>{n}</p>
-              ))}
-            </div>
-          )}
-          {refusals.length > 0 && (
-            <div className="mt-1 w-full max-w-xl text-left">
-              {refusals.map((r) => (
-                <ErrorText key={r}>{r}</ErrorText>
-              ))}
-            </div>
-          )}
+          <div className="rounded-[var(--r-md)] border-2 border-dashed px-8 py-6 text-center font-semibold" style={{ borderColor: "var(--accent)", background: "var(--surface)", color: "var(--accent)" }}>
+            Drop invoice PDFs or a zip to upload them
+          </div>
         </div>
-      </Card>
+      )}
 
-      {/* Ten status pills plus "All" took a whole screenful of vertical
-          space before any invoice was visible, on a phone (user-caught,
-          2026-10-07: "the listing is not visible without scroll... give a
-          small drop down to filter"). Below sm, one compact <select>
-          replaces the wrapped pill row; the pills stay on sm+, where the
-          room to show all ten at a glance is actually there. */}
-      <div className="mb-3.5 sm:hidden">
-        <select
-          value={view}
-          onChange={(e) => setView(e.target.value as View)}
-          aria-label="Filter by status"
-          className="field w-full text-sm"
-        >
-          <option value="all">All · {counts.all}</option>
-          {INTAKE_VIEWS.map((v) => (
+      <div
+        className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[var(--r-md)] border-[1.5px] border-dashed px-4 py-3"
+        style={{ borderColor: "var(--accent-line)", background: "var(--surface)" }}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="shrink-0">
+          <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+          <path d="M14 3v6h6" />
+          <path d="M12 18v-6" />
+          <path d="m9 15 3-3 3 3" />
+        </svg>
+        <p className="min-w-0 flex-1 text-[13px]" style={{ color: "var(--text-muted)" }}>
+          <span className="font-semibold" style={{ color: "var(--text)" }}>
+            Drop invoice PDFs or a zip anywhere on this page.
+          </span>{" "}
+          Each PDF becomes a row in To do. Up to 20 MB each.
+        </p>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="application/pdf,application/zip,.zip"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files) void handleFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        <button type="button" className="btn-secondary btn-sm shrink-0" onClick={() => inputRef.current?.click()}>
+          Upload PDFs
+        </button>
+        {(inFlight.length > 0 || archiveNotes.length > 0 || refusals.length > 0) && (
+          <div className="w-full text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+            {inFlight.length > 0 && (
+              <p>
+                Uploading and reading {inFlight.length} file{inFlight.length === 1 ? "" : "s"}…
+              </p>
+            )}
+            {archiveNotes.map((n) => (
+              <p key={n}>{n}</p>
+            ))}
+            {refusals.map((r) => (
+              <ErrorText key={r}>{r}</ErrorText>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Tabs — five questions instead of ten chips (2026-11-27). On a
+          phone one <select> carries the same choices (2026-10-07's rule). */}
+      <div className="mb-3 sm:hidden">
+        <select value={view} onChange={(e) => pickTab(e.target.value as IntakeTab)} aria-label="Filter by status" className="field w-full text-sm">
+          {INTAKE_TABS.map((t) => (
+            <option key={t.key} value={t.key}>
+              {t.label} · {tabCount(t.key)}
+            </option>
+          ))}
+          {todoSubViews.map((v) => (
             <option key={v.key} value={v.key}>
-              {v.label} · {counts[v.key]}
+              To do › {v.label} · {counts[v.key]}
             </option>
           ))}
         </select>
-        <label className="mt-2 flex items-center gap-2 text-sm font-medium">
-          <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} />
-          Overdue only · {overdueCount}
-        </label>
       </div>
-      <div className="mb-3.5 hidden flex-wrap items-center gap-2 sm:flex">
-        {chip("all", "All", counts.all)}
-        {INTAKE_VIEWS.map((v) => chip(v.key, v.label, counts[v.key]))}
-        {/* A toggle, not one more of the view chips above — "needs chasing
-            for money" combines with any processing state rather than being
-            mutually exclusive with it (2026-10-15, user-asked). */}
+      <div className="mb-3 hidden flex-wrap items-end justify-between gap-3 border-b sm:flex" style={{ borderColor: "var(--border)" }}>
+        <div role="tablist" aria-label="Invoice status" className="-mb-px flex flex-wrap gap-1">
+          {INTAKE_TABS.map((t) => {
+            const on = activeTab === t.key && !overdueOnly;
+            const n = tabCount(t.key);
+            const urgent = t.key === "todo" && n > 0;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                onClick={() => pickTab(t.key)}
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-t-[var(--r-sm)] border-b-2 px-3.5 text-sm hover:bg-[var(--surface-hover)]"
+                style={{ borderColor: on ? "var(--accent)" : "transparent", color: on ? "var(--text)" : "var(--text-muted)", fontWeight: on ? 700 : 500 }}
+              >
+                {t.label}
+                <span
+                  className="tabular-nums min-w-[22px] rounded-full px-1.5 py-px text-center text-[12px] font-semibold"
+                  style={
+                    urgent
+                      ? { background: "var(--accent)", color: "var(--text-on-accent)" }
+                      : on
+                        ? { background: "var(--accent-subtle)", color: "var(--accent-deep)" }
+                        : { background: "var(--neu-bg)", color: "var(--text-muted)" }
+                  }
+                >
+                  {n}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {/* A toggle, not one more tab — "needs chasing for money" is a
+            different question from "where is this in processing". */}
         <button
           type="button"
+          aria-pressed={overdueOnly}
           onClick={() => setOverdueOnly((v) => !v)}
-          className="rounded-full border px-3.5 py-1.5 text-xs font-semibold"
+          className="mb-1.5 inline-flex min-h-[36px] items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold"
           style={
             overdueOnly
-              ? { background: "var(--bad-bg)", borderColor: "var(--bad-line)", color: "var(--bad-fg)" }
-              : { background: "var(--surface)", borderColor: "var(--border)", color: "var(--text-muted)" }
+              ? { background: "var(--bad-fg)", borderColor: "var(--bad-fg)", color: "var(--surface)" }
+              : { background: "var(--bad-bg)", borderColor: "var(--bad-line)", color: "var(--bad-fg)" }
           }
         >
-          Overdue · {overdueCount}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v5l3 2" />
+          </svg>
+          Overdue only · {overdueCount}
         </button>
       </div>
+      <label className="mb-3 flex items-center gap-2 text-sm font-medium sm:hidden">
+        <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} />
+        Overdue only · {overdueCount}
+      </label>
+
+      {/* Under To do, its parts — only those holding something. */}
+      {activeTab === "todo" && !overdueOnly && todoSubViews.length > 1 && (
+        <div className="mb-3 hidden flex-wrap items-center gap-2 sm:flex">
+          {[{ key: "todo" as const, label: "All to do", n: tabCount("todo") }, ...todoSubViews.map((v) => ({ key: v.key, label: v.label, n: counts[v.key] }))].map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => setView(c.key)}
+              className="rounded-full border px-3 py-1 text-xs font-semibold"
+              style={
+                view === c.key
+                  ? { background: "var(--accent-subtle)", borderColor: "var(--accent-line)", color: "var(--accent-deep)" }
+                  : { background: "var(--surface)", borderColor: "var(--border)", color: "var(--text-muted)" }
+              }
+            >
+              {c.label} <span className="tabular-nums opacity-80">{c.n}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {(overdueOnly || tabMeta.hint) && (
+        <p className="mb-3 text-[13px]" style={{ color: "var(--text-muted)" }}>
+          {overdueOnly ? "Released invoices past their due date and not fully paid, from every tab." : tabMeta.hint}
+        </p>
+      )}
 
       <div className="mb-3.5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <input
@@ -590,15 +777,10 @@ export function IntakeClient({
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search invoice number, file, society or month"
           aria-label="Search invoices"
-          className="field w-full text-sm sm:w-auto sm:min-w-[16rem] sm:flex-1"
+          className="field w-full text-sm sm:w-auto sm:min-w-[16rem] sm:flex-[3]"
         />
-        <div className="flex gap-2">
-          <select
-            value={societyFilter}
-            onChange={(e) => setSocietyFilter(e.target.value)}
-            aria-label="Filter by society"
-            className="field flex-1 text-sm sm:w-auto sm:flex-none"
-          >
+        <div className="flex gap-2 sm:flex-[2]">
+          <select value={societyFilter} onChange={(e) => setSocietyFilter(e.target.value)} aria-label="Filter by society" className="field min-w-0 flex-1 text-sm">
             <option value="">Every society</option>
             {societies.map((name) => (
               <option key={name} value={name}>
@@ -606,12 +788,7 @@ export function IntakeClient({
               </option>
             ))}
           </select>
-          <select
-            value={monthFilter}
-            onChange={(e) => setMonthFilter(e.target.value)}
-            aria-label="Filter by month"
-            className="field flex-1 text-sm sm:w-auto sm:flex-none"
-          >
+          <select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} aria-label="Filter by month" className="field min-w-0 flex-1 text-sm">
             <option value="">Every month</option>
             {months.map(([key, label]) => (
               <option key={key} value={key}>
@@ -659,253 +836,192 @@ export function IntakeClient({
         </div>
       )}
 
-      {selectableVisible.length > 0 && (
-        <div className="mb-3.5 flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-sm font-medium">
-            <input type="checkbox" checked={allSelected} onChange={toggleAll} />
-            Select all on screen ({selectableVisible.length})
-          </label>
-          {selected.size > 0 && (
-            <>
-              {(["file", "release", "submit"] as BulkAction[]).map((a) => {
-                const n = countFor(a);
-                if (n === 0) return null;
-                return (
-                  <button
-                    key={a}
-                    type="button"
-                    className={a === "release" ? "btn-primary btn-sm" : "btn-secondary btn-sm"}
-                    disabled={submitting}
-                    onClick={() => void runBulk(a)}
-                  >
-                    {BULK_LABEL[a](n)}
-                  </button>
-                );
-              })}
-              <span className="text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
-                {selected.size} selected{submitting ? " · working…" : ""}
-              </span>
-            </>
-          )}
+      {selected.size > 0 && (
+        <div
+          className="mb-3.5 flex flex-wrap items-center gap-3 rounded-[var(--r-md)] px-4 py-2.5"
+          style={{ background: "var(--accent-subtle)", border: "1px solid var(--accent-line)" }}
+        >
+          <span className="text-sm font-semibold">
+            {selected.size} selected{submitting ? " · working…" : ""}
+          </span>
+          <span className="flex-1" />
+          {(["file", "release", "submit"] as BulkAction[]).map((a) => {
+            const n = countFor(a);
+            if (n === 0) return null;
+            return (
+              <button key={a} type="button" className="btn-secondary btn-sm" disabled={submitting} onClick={() => void runBulk(a)}>
+                {BULK_LABEL[a](n)}
+              </button>
+            );
+          })}
+          <button type="button" className="btn-ghost btn-sm" disabled={submitting} onClick={() => setSelected(new Set())}>
+            Clear
+          </button>
         </div>
       )}
 
       <Card className="overflow-hidden">
         {visible.length === 0 ? (
-          <p className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>
-            {rows.length === 0
-              ? "Nothing in flight. Drop this month's invoices, or the whole backfill — one file per invoice."
-              : filtering
-                ? `No invoice matches${counts.all > 0 ? " under this chip — " + counts.all + " match under All" : ""}.`
-                : (INTAKE_VIEWS.find((v) => v.key === view)?.empty ?? "Nothing here.")}
-          </p>
+          <div className="px-6 py-10 text-center">
+            <p className="font-semibold">Nothing here</p>
+            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+              {emptyText}
+            </p>
+          </div>
         ) : (
-          /* table-layout: fixed, widths declared once on the header row.
-             tbl-compact's tighter gutters plus per-column max-widths (built
-             2026-08-31/2026-09-24) were not enough on their own: under the
-             default `auto` layout, eight columns' worth of generous
-             max-widths still summed past a typical laptop's content area,
-             so the table needed scrolling to see at all. Narrowing those
-             max-widths fixed every single-status filter but not "All"
-             specifically — `auto` sizes each column
-             to the WIDEST content across every RENDERED row, and "All" is
-             the one view that renders every status's own widest Action-cell
-             shape (a "Retry" + "Enter by hand" pair, an "Open month" link,
-             a "Reading…" button) side by side at once — a single-status
-             filter only ever needs its own narrower shape, so it fit while
-             "All" did not (user-reported again, same day: "rest is fixed
-             but the default all filter page is still not fixed"). Fixed
-             layout makes every column's width deterministic from this row
-             alone, independent of which rows happen to be on screen; cell
-             content that doesn't fit still truncates/wraps via the
-             existing per-cell classes. The overflow-x-auto wrapper stays as
-             the safety net for a genuinely narrow viewport. */
-          <div className="overflow-x-auto">
-            <table className="tbl tbl-compact" style={{ tableLayout: "fixed", width: "100%" }}>
-              <thead>
-                <tr>
-                  <th className="w-10" />
-                  <SortHeader k="invoice" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="w-[180px]" />
-                  <SortHeader k="society" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden w-[110px] md:table-cell" />
-                  <SortHeader k="period" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden w-[105px] md:table-cell" />
-                  <SortHeader k="total" sortKey={sortKey} dir={sortDir} onSort={sortBy} align="right" className="w-[105px]" />
-                  {/* 245px, sized for the single longest real status label
-                      ("Submitted — awaiting release", 29 chars) — narrower
-                      widths overflowed this .chip (white-space: nowrap by
-                      design, so it cannot wrap) right on top of the Uploaded
-                      column beside it (user-reported 2026-09-24, screenshot:
-                      "release8days ago"). */}
-                  <SortHeader k="status" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="w-[245px]" />
-                  {/* 115px — shortened wording for this column specifically
-                      (PAYMENT_STATUS_COMPACT in page.tsx: "Not released",
-                      "Pending", "Overdue", "Suspended", "Paid") after the
-                      shared BILLING_INVOICE_STATUS sentences ("Attached —
-                      not yet released") pushed Month/Total into visibly
-                      overlapping each other at this column's expense, under
-                      table-layout:fixed's proportional scaling (user-
-                      reported, screenshot). */}
-                  <th className="hidden w-[115px] xl:table-cell">Payment</th>
-                  <SortHeader k="uploaded" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden w-[90px] lg:table-cell" />
-                  <th className="w-[190px]" />
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((r) => {
-                  const reviewHref = `/admin/billing/intake/${r.id}`;
-                  return (
-                    <tr key={r.id}>
-                      <td>
-                        {actionsOf(r).length > 0 && (
-                          <input
-                            type="checkbox"
-                            checked={selected.has(r.id)}
-                            onChange={() => toggleSelect(r.id)}
-                            aria-label={`Select ${r.invoiceNumber ?? r.fileName}`}
-                          />
-                        )}
-                      </td>
-                      <td className="max-w-[14rem] md:max-w-[18rem]">
-                        <p className="truncate font-medium" title={r.fileName}>
-                          {r.invoiceNumber ?? r.fileName}
-                        </p>
-                        <p className="truncate text-[12px]" style={{ color: "var(--text-subtle)" }}>
-                          {r.invoiceNumber ? `${r.fileName} · ` : ""}
-                          {r.fromZoho ? "from Zoho" : `${(r.fileSize / 1024).toFixed(0)} KB`} · {r.uploadedAgo} · {r.uploadedBy}
-                        </p>
-                        {r.zohoChanged && (
-                          <p className="text-[12px]" style={{ color: "var(--warn-fg)" }}>
-                            {r.status.startsWith("submitted")
-                              ? "Changed in Zoho since this was processed — open it to review"
-                              : "Changed in Zoho since it was fetched"}
+          <>
+          {/* A phone gets a stacked list — four columns cannot share 390px. */}
+          <div className="md:hidden">
+            {groups.map((g) => (
+              <div key={g.key || "unconfirmed"}>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 px-4 pb-2 pt-3" style={{ background: "var(--surface-sunken)" }}>
+                  <span className="text-[13px] font-bold">{g.label}</span>
+                  <span className="tabular-nums text-[12px]" style={{ color: "var(--text-muted)" }}>
+                    {g.summary}
+                  </span>
+                </div>
+                <ul>
+                  {g.rows.map((r) => (
+                    <li key={r.id} className="flex gap-3 border-b px-4 py-3" style={{ borderColor: "var(--border-subtle)" }}>
+                      {actionsOf(r).length > 0 && (
+                        <input
+                          type="checkbox"
+                          className="mt-1 shrink-0"
+                          checked={selected.has(r.id)}
+                          onChange={() => toggleSelect(r.id)}
+                          aria-label={`Select ${r.invoiceNumber ?? r.fileName}`}
+                        />
+                      )}
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <p className="min-w-0 font-semibold" style={{ color: r.society ? "var(--text)" : "var(--text-subtle)" }}>
+                            {r.society ?? "Society not confirmed"}
                           </p>
-                        )}
-                        <p className="text-[12px] md:hidden" style={{ color: "var(--text-subtle)" }}>
-                          {r.society ?? "Society not confirmed"} · {r.period ?? "month not confirmed"}
+                          <p className="shrink-0 font-semibold tabular-nums">{r.total !== null ? inr(r.total) : ""}</p>
+                        </div>
+                        <p className="truncate text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
+                          {r.invoiceNumber ?? r.fileName} · {r.fromZoho ? "from Zoho" : "PDF"} · {r.uploadedAgo}
+                          {r.dueDate ? ` · due ${formatDate(r.dueDate)}` : ""}
                         </p>
-                        {r.paymentStatus && (
-                          <p className="mt-1 xl:hidden">
-                            <StatusChip tone={r.paymentStatus.tone}>{r.paymentStatus.label}</StatusChip>
-                          </p>
-                        )}
-                      </td>
-                      <td className="hidden max-w-[9rem] truncate md:table-cell" title={r.society ?? undefined}>
-                        {r.society ?? <span style={{ color: "var(--text-subtle)" }}>Not confirmed</span>}
-                      </td>
-                      <td className="hidden truncate md:table-cell" title={r.period ?? undefined}>
-                        {r.period ?? <span style={{ color: "var(--text-subtle)" }}>Not confirmed</span>}
-                      </td>
-                      <td className="num whitespace-nowrap text-right">{r.total !== null ? inr(r.total) : "—"}</td>
-                      <td>
-                        <StatusChip tone={r.statusTone}>{r.statusLabel}</StatusChip>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <StatusChip tone={r.statusTone}>{r.statusLabel}</StatusChip>
+                          {r.paymentStatus && <StatusChip tone={r.paymentStatus.tone}>{r.paymentStatus.label}</StatusChip>}
+                        </div>
                         {r.note && (
-                          <p className="mt-1 line-clamp-2 text-[12px]" style={{ color: "var(--text-subtle)" }} title={r.note}>
+                          <p className="line-clamp-2 text-[12px]" style={{ color: "var(--text-muted)" }}>
                             {r.note}
                           </p>
                         )}
-                      </td>
-                      <td className="hidden whitespace-nowrap xl:table-cell">
-                        {r.paymentStatus ? (
-                          <StatusChip tone={r.paymentStatus.tone}>{r.paymentStatus.label}</StatusChip>
-                        ) : (
-                          <span style={{ color: "var(--text-subtle)" }}>—</span>
+                        {r.zohoChanged && (
+                          <p className="text-[12px]" style={{ color: "var(--warn-fg)" }}>
+                            Changed in Zoho since {r.status.startsWith("submitted") ? "this was processed — open it to review" : "it was fetched"}
+                          </p>
                         )}
-                      </td>
-                      <td className="hidden whitespace-nowrap text-[12.5px] lg:table-cell" style={{ color: "var(--text-muted)" }} title={r.uploadedAt}>
-                        {r.uploadedAgo}
-                      </td>
-                      <td className="whitespace-nowrap text-right">
-                        {r.status.startsWith("submitted") && r.calculationId ? (
-                          <Link href={`/admin/billing/${r.calculationId}`} className="btn-ghost btn-sm">
-                            Open month
-                          </Link>
-                        ) : r.status === "submitted_retail" && r.retailCustomerId ? (
-                          <Link href={`/admin/retail-customers/${r.retailCustomerId}`} className="btn-ghost btn-sm">
-                            View customer
-                          </Link>
-                        ) : (r.status === "submitted_filed_document" || r.status === "submitted_filed_released") && r.filedDocumentId ? (
-                          <span className="inline-flex items-center gap-1.5">
-                            <Link href={`/admin/documents/${r.filedDocumentId}`} className="btn-ghost btn-sm">
-                              View document
-                            </Link>
-                            {/* Only offered while still unreleased — once a
-                                society has the document, the way back is to
-                                withdraw it from its own page instead, which
-                                the server also says (don't offer a control
-                                that can only refuse). */}
-                            {r.status === "submitted_filed_document" && (
-                              <button
-                                type="button"
-                                className="btn-ghost btn-sm"
-                                onClick={() => {
-                                  setUnfileTarget({ id: r.id, fileName: r.invoiceNumber ?? r.fileName });
-                                  setUnfileReason("");
-                                  setUnfileError(null);
-                                }}
-                              >
-                                Unfile
-                              </button>
-                            )}
-                          </span>
-                        ) : r.status === "reading" ? (
-                          // Same shape as the "uploaded" branch just below
-                          // (a fixed-width disabled button, same gap, same
-                          // sibling link) — a bare span here was a second
-                          // width jump the moment the server's own "reading"
-                          // status landed, on top of the button's own.
-                          <span className="inline-flex items-center gap-1.5">
-                            <button type="button" className="btn-primary btn-sm w-[92px] shrink-0" disabled>
-                              Reading…
-                            </button>
-                            <Link href={reviewHref} className="btn-ghost btn-sm">
-                              Enter by hand
-                            </Link>
-                          </span>
-                        ) : r.status === "uploaded" ? (
-                          <span className="inline-flex items-center gap-1.5">
-                            {/* Fixed width, sized for its own longest state
-                                ("Reading…") — user-reported 2026-09-24: this
-                                button growing on click was what shifted every
-                                column beside it, since the table has no fixed
-                                layout of its own. */}
-                            <button
-                              type="button"
-                              className="btn-primary btn-sm w-[92px] shrink-0"
-                              disabled={retrying.has(r.id)}
-                              onClick={() => void retry(r.id, true)}
-                            >
-                              {retrying.has(r.id) ? "Reading…" : "Read"}
-                            </button>
-                            <Link href={reviewHref} className="btn-ghost btn-sm">
-                              Enter by hand
-                            </Link>
-                          </span>
-                        ) : r.status === "could_not_read" ? (
-                          <span className="inline-flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              className="btn-secondary btn-sm w-[92px] shrink-0"
-                              disabled={retrying.has(r.id)}
-                              onClick={() => void retry(r.id)}
-                            >
-                              {retrying.has(r.id) ? "Reading…" : "Retry"}
-                            </button>
-                            <Link href={reviewHref} className="btn-ghost btn-sm">
-                              Enter by hand
-                            </Link>
-                          </span>
-                        ) : (
-                          <Link href={reviewHref} className="btn-secondary btn-sm">
-                            Review
-                          </Link>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
+                        <div className="pt-0.5">{actionFor(r)}</div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
+            <table className="tbl tbl-compact" style={{ tableLayout: "fixed", width: "100%", minWidth: 760 }}>
+              <colgroup>
+                <col style={{ width: 44 }} />
+                <col />
+                <col style={{ width: 108 }} />
+                <col style={{ width: 230 }} />
+                <col style={{ width: 104 }} />
+                <col style={{ width: 176 }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>
+                    {selectableVisible.length > 0 && (
+                      <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label={`Select all ${selectableVisible.length} on screen`} />
+                    )}
+                  </th>
+                  <SortHeader k="society" label="Society · invoice" sortKey={sortKey} dir={sortDir} onSort={sortBy} />
+                  <SortHeader k="total" label="Amount" sortKey={sortKey} dir={sortDir} onSort={sortBy} align="right" />
+                  <SortHeader k="status" sortKey={sortKey} dir={sortDir} onSort={sortBy} />
+                  <SortHeader k="due" sortKey={sortKey} dir={sortDir} onSort={sortBy} />
+                  <th>
+                    <span className="sr-only">Action</span>
+                  </th>
+                </tr>
+              </thead>
+              {groups.map((g) => (
+                <tbody key={g.key || "unconfirmed"}>
+                  <tr>
+                    <td colSpan={6} style={{ background: "var(--surface-sunken)", paddingTop: 12, paddingBottom: 8 }}>
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                        <span className="text-[13px] font-bold">{g.label}</span>
+                        <span className="tabular-nums text-[12px]" style={{ color: "var(--text-muted)" }}>
+                          {g.summary}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                  {g.rows.map((r) => {
+                    const overdue = r.paymentStatus?.tone === "bad";
+                    return (
+                      <tr key={r.id}>
+                        <td>
+                          {actionsOf(r).length > 0 && (
+                            <input
+                              type="checkbox"
+                              checked={selected.has(r.id)}
+                              onChange={() => toggleSelect(r.id)}
+                              aria-label={`Select ${r.invoiceNumber ?? r.fileName}`}
+                            />
+                          )}
+                        </td>
+                        <td>
+                          <p className="font-semibold" style={{ color: r.society ? "var(--text)" : "var(--text-subtle)" }}>
+                            {r.society ?? "Society not confirmed"}
+                          </p>
+                          <p className="truncate text-[12.5px]" style={{ color: "var(--text-subtle)" }} title={`${r.fileName} · ${r.uploadedAt} · ${r.uploadedBy}`}>
+                            <span>{r.invoiceNumber ?? r.fileName}</span>
+                            {" · "}
+                            {r.fromZoho ? "from Zoho" : `${(r.fileSize / 1024).toFixed(0)} KB PDF`} · {r.uploadedAgo}
+                          </p>
+                          {r.zohoChanged && (
+                            <p className="text-[12px]" style={{ color: "var(--warn-fg)" }}>
+                              {r.status.startsWith("submitted") ? "Changed in Zoho since this was processed — open it to review" : "Changed in Zoho since it was fetched"}
+                            </p>
+                          )}
+                        </td>
+                        <td className="tabular-nums whitespace-nowrap text-right font-semibold">{r.total !== null ? inr(r.total) : "—"}</td>
+                        <td>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <StatusChip tone={r.statusTone}>{r.statusLabel}</StatusChip>
+                            {r.paymentStatus && <StatusChip tone={r.paymentStatus.tone}>{r.paymentStatus.label}</StatusChip>}
+                          </div>
+                          {r.note && (
+                            <p className="mt-1 line-clamp-2 text-[12px]" style={{ color: "var(--text-muted)" }} title={r.note}>
+                              {r.note}
+                            </p>
+                          )}
+                        </td>
+                        <td className="tabular-nums whitespace-nowrap text-[13px]" style={{ color: overdue ? "var(--bad-fg)" : "var(--text-muted)", fontWeight: overdue ? 600 : 400 }}>
+                          {r.dueDate ? formatDate(r.dueDate) : "—"}
+                        </td>
+                        <td className="whitespace-nowrap text-right">{actionFor(r)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              ))}
             </table>
           </div>
+          </>
         )}
+        <div className="flex flex-wrap justify-between gap-2 border-t px-5 py-3 text-[12.5px]" style={{ borderColor: "var(--border-subtle)", color: "var(--text-muted)" }}>
+          <span>
+            Showing {visible.length} of {rows.length}
+          </span>
+        </div>
       </Card>
 
       <Modal
@@ -1042,8 +1158,10 @@ function SortHeader({
   onSort,
   align = "left",
   className,
+  label,
 }: {
   k: IntakeSortKey;
+  label?: string;
   sortKey: IntakeSortKey;
   dir: 1 | -1;
   onSort: (k: IntakeSortKey) => void;
@@ -1059,7 +1177,7 @@ function SortHeader({
         className="inline-flex items-center gap-1.5 hover:opacity-80"
         style={{ color: active ? "var(--text)" : "inherit", font: "inherit", letterSpacing: "inherit", textTransform: "inherit" }}
       >
-        {INTAKE_SORTS[k].label}
+        {label ?? INTAKE_SORTS[k].label}
         <span aria-hidden style={{ opacity: active ? 1 : 0.25 }}>
           {active ? (dir === 1 ? "↑" : "↓") : "↕"}
         </span>

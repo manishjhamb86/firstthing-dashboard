@@ -127,6 +127,58 @@ export function intakeViewOf(status: string): IntakeView | null {
   }
 }
 
+/**
+ * The list's five tabs (2026-11-27, redesign): the ten views above folded
+ * into the questions an operator actually asks. "To do" is everything
+ * waiting on a person — not read, could not read, duplicate, needs review,
+ * ready, sent back — and under it the individual views stay available as
+ * sub-filters, shown only when they hold something (the error rows keep a
+ * filter of their own, as asked 2026-09-24). A superseded month is history
+ * of a released one, so it sits under Released.
+ */
+export type IntakeTab = "todo" | "awaiting" | "released" | "filed" | "all";
+
+export const INTAKE_TABS: { key: IntakeTab; label: string; hint: string; empty: string }[] = [
+  { key: "todo", label: "To do", hint: "Waiting on you: not read, could not read, duplicates, needs review, ready to submit and sent back.", empty: "Nothing is waiting on you." },
+  { key: "awaiting", label: "Awaiting release", hint: "Submitted months the accountant has not released yet.", empty: "Every submitted month has been released." },
+  { key: "released", label: "Released", hint: "", empty: "Nothing released yet." },
+  { key: "filed", label: "Filed as document", hint: "Bills kept as documents (or retail sales) — never a month of record.", empty: "Nothing filed separately." },
+  { key: "all", label: "All", hint: "", empty: "Nothing here." },
+];
+
+export const TODO_VIEWS: IntakeView[] = ["unread", "failed", "duplicate", "review", "ready", "sent_back"];
+
+export function intakeTabOf(view: IntakeView | null): IntakeTab | null {
+  if (!view) return null;
+  if (TODO_VIEWS.includes(view)) return "todo";
+  if (view === "awaiting_release") return "awaiting";
+  if (view === "released" || view === "superseded") return "released";
+  if (view === "filed") return "filed";
+  return null;
+}
+
+/** Whether a row (by its view) is shown under a filter, which is a tab or one To-do sub-view. */
+export function intakeFilterMatches(rowView: IntakeView | null, filter: IntakeTab | IntakeView): boolean {
+  if (filter === "all") return true;
+  if (INTAKE_TABS.some((t) => t.key === filter)) return intakeTabOf(rowView) === filter;
+  return rowView === filter;
+}
+
+/** The tab a filter belongs to — a To-do sub-view belongs to To do. */
+export function tabOfFilter(filter: IntakeTab | IntakeView): IntakeTab {
+  if (INTAKE_TABS.some((t) => t.key === filter)) return filter as IntakeTab;
+  return intakeTabOf(filter as IntakeView) ?? "all";
+}
+
+/** Whole days a due date is behind `today` (both UTC calendar days); 0 when not past. */
+export function daysPastDue(dueIso: string | null, today: Date): number {
+  if (!dueIso) return 0;
+  const due = Date.parse(`${dueIso.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(due)) return 0;
+  const t = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  return Math.max(0, Math.round((t - due) / 86_400_000));
+}
+
 export type IntakeListRow = {
   fileName: string;
   invoiceNumber: string | null;
@@ -137,9 +189,11 @@ export type IntakeListRow = {
   status: string;
   statusLabel: string;
   uploadedAtMs: number;
+  /** `YYYY-MM-DD`, the invoice's due date — the live bill's, else the review's. */
+  dueDate?: string | null;
 };
 
-export type IntakeSortKey = "invoice" | "society" | "period" | "total" | "status" | "uploaded";
+export type IntakeSortKey = "invoice" | "society" | "period" | "total" | "status" | "uploaded" | "due";
 
 /**
  * The status column sorts in the order work flows, so "what is furthest
@@ -173,6 +227,7 @@ export const INTAKE_SORTS: Record<IntakeSortKey, { label: string; firstDir: 1 | 
   // Furthest behind first — that is why anyone sorts by status.
   status: { label: "Status", firstDir: 1, get: (r) => STATUS_ORDER[r.status] ?? null },
   uploaded: { label: "Uploaded", firstDir: -1, get: (r) => r.uploadedAtMs },
+  due: { label: "Due", firstDir: -1, get: (r) => r.dueDate ?? null },
 };
 
 /**
@@ -221,7 +276,7 @@ export function intakeMatches(row: IntakeListRow & { periodLabel?: string | null
  * page's own return all land on the same filtered list.
  */
 export type IntakeFilters = {
-  view: IntakeView | "all";
+  view: IntakeView | IntakeTab;
   q: string;
   society: string;
   month: string;
@@ -233,7 +288,7 @@ export type IntakeFilters = {
   overdue: boolean;
 };
 
-export const DEFAULT_INTAKE_FILTERS: IntakeFilters = { view: "all", q: "", society: "", month: "", sort: "uploaded", dir: -1, overdue: false };
+export const DEFAULT_INTAKE_FILTERS: IntakeFilters = { view: "todo", q: "", society: "", month: "", sort: "uploaded", dir: -1, overdue: false };
 
 /** Read filters from search params; anything unrecognised falls back to the default. */
 export function parseIntakeFilters(p: Record<string, string | string[] | undefined>): IntakeFilters {
@@ -243,7 +298,7 @@ export function parseIntakeFilters(p: Record<string, string | string[] | undefin
   };
   const view = one("view");
   const sort = one("sort");
-  const validView = view === "all" || INTAKE_VIEWS.some((v) => v.key === view);
+  const validView = INTAKE_TABS.some((t) => t.key === view) || INTAKE_VIEWS.some((v) => v.key === view);
   const validSort = sort in INTAKE_SORTS;
   return {
     view: validView ? (view as IntakeFilters["view"]) : DEFAULT_INTAKE_FILTERS.view,

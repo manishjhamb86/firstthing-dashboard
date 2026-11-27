@@ -25,15 +25,17 @@ export type SharedDocItem = {
 /**
  * The society page's "Documents shared with the society" card (2026-11-27,
  * user-asked): a tab per month that holds documents, opening on the latest,
- * and each row dated by the document itself. The signed agreement belongs to
- * no month, so it stays above the tabs.
+ * each row dated by the document itself. The tabs sit at the top and there is
+ * ONE table under them (2026-11-28, user-caught: tabs between two tables read
+ * as two lists). The signed agreement belongs to no month, so it leads the
+ * table in every tab, marked as always shown.
  */
 export function SharedDocuments({
-  agreement,
+  pinned,
   rows,
   canWithdraw,
 }: {
-  agreement: SharedDocItem | null;
+  pinned: SharedDocItem[];
   rows: SharedDocItem[];
   canWithdraw: boolean;
 }) {
@@ -43,40 +45,30 @@ export function SharedDocuments({
 
   return (
     <div className="mt-3 flex flex-col gap-3">
-      {agreement && (
-        <div className="overflow-x-auto">
-          <DocTable items={[agreement]} canWithdraw={canWithdraw} />
+      {months.length > 0 && (
+        <div className="seg self-start" role="tablist" aria-label="Month">
+          {months.map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              aria-selected={m === month}
+              className={m === month ? "on" : undefined}
+              onClick={() => setMonth(m)}
+            >
+              {monthLabel(m)} · {rows.filter((r) => r.period === m).length}
+            </button>
+          ))}
         </div>
       )}
-      {months.length > 0 && (
-        <>
-          <div className="seg" role="tablist" aria-label="Month">
-            {months.map((m) => {
-              const n = rows.filter((r) => r.period === m).length;
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  role="tab"
-                  aria-selected={m === month}
-                  className={m === month ? "on" : undefined}
-                  onClick={() => setMonth(m)}
-                >
-                  {monthLabel(m)} · {n}
-                </button>
-              );
-            })}
-          </div>
-          <div className="overflow-x-auto" role="tabpanel">
-            <DocTable items={shown} canWithdraw={canWithdraw} />
-          </div>
-        </>
-      )}
+      <div className="overflow-x-auto" role={months.length > 0 ? "tabpanel" : undefined}>
+        <DocTable pinned={pinned} items={shown} canWithdraw={canWithdraw} />
+      </div>
     </div>
   );
 }
 
-function DocTable({ items, canWithdraw }: { items: SharedDocItem[]; canWithdraw: boolean }) {
+function DocTable({ pinned, items, canWithdraw }: { pinned: SharedDocItem[]; items: SharedDocItem[]; canWithdraw: boolean }) {
   return (
     <table className="tbl tbl-compact">
       <thead>
@@ -88,9 +80,16 @@ function DocTable({ items, canWithdraw }: { items: SharedDocItem[]; canWithdraw:
         </tr>
       </thead>
       <tbody>
-        {items.map((d) => (
-          <tr key={d.key}>
-            <td className="num whitespace-nowrap">{d.dateLabel}</td>
+        {[...pinned.map((d) => ({ d, pin: true })), ...items.map((d) => ({ d, pin: false }))].map(({ d, pin }) => (
+          <tr key={d.key} style={pin ? { background: "var(--surface-sunken)" } : undefined}>
+            <td className="num whitespace-nowrap">
+              {d.dateLabel}
+              {pin && (
+                <span className="block text-[11px] font-sans" style={{ color: "var(--text-subtle)" }}>
+                  Always shown
+                </span>
+              )}
+            </td>
             <td>
               <span className="font-medium">{d.title}</span>
               <span className="block text-xs text-[var(--text-subtle)]">{d.detail}</span>

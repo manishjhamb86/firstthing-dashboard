@@ -21,7 +21,7 @@
  *     draft is still being worked on, nothing to show yet.
  */
 import { db } from "@/lib/db";
-import { formatDate, formatDateTime } from "@/lib/format-date";
+import { formatDate, formatDateTime, monthLabel } from "@/lib/format-date";
 import { publicS3Url } from "@/lib/s3";
 import { dealLabel } from "@/lib/deal-scope";
 import type { ChipTone } from "@/components/ui";
@@ -184,7 +184,7 @@ export async function societyDocuments(
         docType: "savingsReport",
         period: r.period,
         date: r.publishedAt.toISOString(),
-        title: `Monthly savings report — ${snap.circuitLabel ?? "circuit"}`,
+        title: `Monthly savings report — ${monthLabel(r.period)} · ${snap.circuitLabel ?? "circuit"}`,
         detail: `published ${formatDate(r.publishedAt)}${r.version > 1 ? ` · v${r.version}` : ""}`,
         portalHref: `/portal/reports/savings/${r.id}`,
         adminHref: `/admin/societies/${societyId}/circuits/${r.circuitId}/reports/monthly?month=${r.period}`,

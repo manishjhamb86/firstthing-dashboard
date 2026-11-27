@@ -70,3 +70,49 @@ export async function savePublicPage(input: {
   revalidatePath(`/${slug}`);
   return { saved: true, slug };
 }
+
+/**
+ * Make several societies' public pages visible or hidden at once (2026-11-28,
+ * user-asked, from Societies → Public pages). Operations only, as for one
+ * page. A closed society's page stays hidden whatever is chosen — it is
+ * skipped and named.
+ */
+export async function setPublicPagesVisible(input: {
+  societyIds: string[];
+  visible: boolean;
+}): Promise<{ error?: string; changed?: number; skipped?: string[] }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!isOperations(actor.team)) {
+    logger.warn("society.public_page_bulk_refused", { actorId: actor.id, actorTeam: actor.team, count: input.societyIds.length });
+    return { error: "A society's public page is an operations action." };
+  }
+  const ids = [...new Set(input.societyIds)].slice(0, 500);
+  if (ids.length === 0) return { error: "Select at least one society." };
+  const societies = await db.society.findMany({
+    where: { id: { in: ids }, publicSlug: { not: null } },
+    select: { id: true, name: true, status: true, publicPageEnabled: true, publicPagePublishedAt: true },
+  });
+  const skipped = input.visible ? societies.filter((s) => s.status === "terminated").map((s) => s.name) : [];
+  const toChange = societies.filter((s) => s.publicPageEnabled !== input.visible && !(input.visible && s.status === "terminated"));
+  const now = new Date();
+  await db.$transaction(
+    toChange.map((s) =>
+      db.society.update({
+        where: { id: s.id },
+        data: {
+          publicPageEnabled: input.visible,
+          publicPagePublishedAt: s.publicPagePublishedAt ?? (input.visible ? now : null),
+        },
+      }),
+    ),
+  );
+  logger.info("society.public_page_bulk_visibility", {
+    actorId: actor.id,
+    visible: input.visible,
+    changed: toChange.map((s) => s.id),
+    skipped,
+  });
+  revalidatePath("/admin/public-pages");
+  return { changed: toChange.length, skipped };
+}

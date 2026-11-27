@@ -671,8 +671,8 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
           </EmptyState>
         ) : (
           <SharedDocuments
-            agreement={sharedDocs.agreement ? toSharedItem(sharedDocs.agreement) : null}
-            rows={sharedDocs.rows.map(toSharedItem)}
+            pinned={[...(sharedDocs.agreement ? [sharedDocs.agreement] : []), ...sharedDocs.rows.filter((d) => d.docType === "agreement")].map(toSharedItem)}
+            rows={sharedDocs.rows.filter((d) => d.docType !== "agreement").map(toSharedItem)}
             canWithdraw={!!viewer?.permissions.includes("manage_pipeline")}
           />
         )}
@@ -687,7 +687,9 @@ function toSharedItem(d: SocietyDocRow): SharedDocItem {
   return {
     key: `${d.docType}-${d.id}`,
     id: d.id,
-    period: d.period,
+    // The tab is the month of the date shown, so a row never sits under a
+    // month its own date contradicts (2026-11-28, user-caught).
+    period: (d.date ?? d.period).slice(0, 7),
     dateLabel: d.docType === "gatePass" ? formatDateTime(d.date) : formatDate(d.date),
     title: d.title,
     detail: d.detail,

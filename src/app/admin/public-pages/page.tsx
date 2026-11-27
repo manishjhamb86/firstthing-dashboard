@@ -1,7 +1,8 @@
-import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireAdminPage } from "@/lib/admin-permissions";
-import { Card, PageHeader, StatusChip } from "@/components/ui";
+import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
+import { Card, PageHeader } from "@/components/ui";
+import { isOperations } from "@/lib/admin-teams";
+import { PublicPagesTable, type PublicPageRow } from "./public-pages-table";
 import { PUBLIC_SECTIONS } from "@/lib/public-page-sections";
 import { publicPageBase } from "@/lib/public-page-base";
 
@@ -14,6 +15,7 @@ export const metadata = { title: "Public pages" };
  */
 export default async function PublicPagesList() {
   await requireAdminPage();
+  const actor = await resolveAdmin();
   const base = await publicPageBase();
   const societies = await db.society.findMany({
     where: { publicSlug: { not: null } },
@@ -29,52 +31,20 @@ export default async function PublicPagesList() {
         subtitle={`Each society's own page at ${base.replace(/^https?:\/\//, "")}/<name> — what its RWA shows residents. ${live} of ${societies.length} visible to their society; the rest are hidden until made visible.`}
       />
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Society</th>
-                <th>Address</th>
-                <th>Status</th>
-                <th>Sections shown</th>
-                <th>
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {societies.map((s) => {
-                const shown = total - s.publicHiddenSections.length - (s.publicShowLeadership ? 0 : 1);
-                const isLive = s.publicPageEnabled && s.status !== "terminated";
-                return (
-                  <tr key={s.id}>
-                    <td>
-                      <p className="font-semibold">{s.name}</p>
-                      <p className="text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
-                        {s.location}
-                      </p>
-                    </td>
-                    <td className="tabular-nums">/{s.publicSlug}</td>
-                    <td>
-                      <StatusChip tone={isLive ? "ok" : "neu"}>{isLive ? "Visible" : s.status === "terminated" ? "Hidden — society closed" : "Hidden"}</StatusChip>
-                    </td>
-                    <td className="tabular-nums">
-                      {shown} of {total}
-                    </td>
-                    <td className="whitespace-nowrap text-right">
-                      <a href={`/${s.publicSlug}`} target="_blank" rel="noreferrer" className="btn-ghost btn-sm">
-                        {isLive ? "Open" : "Preview"}
-                      </a>
-                      <Link href={`/admin/public-pages/${s.id}`} className="btn-secondary btn-sm">
-                        Edit
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <PublicPagesTable
+          canEdit={!!actor && isOperations(actor.team)}
+          rows={societies.map(
+            (s): PublicPageRow => ({
+              id: s.id,
+              name: s.name,
+              location: s.location,
+              slug: s.publicSlug ?? "",
+              status: s.status === "terminated" ? "closed" : s.publicPageEnabled ? "visible" : "hidden",
+              shown: total - s.publicHiddenSections.length - (s.publicShowLeadership ? 0 : 1),
+              total,
+            }),
+          )}
+        />
       </Card>
     </>
   );

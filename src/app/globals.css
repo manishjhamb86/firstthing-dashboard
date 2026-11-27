@@ -629,11 +629,14 @@ textarea.field {
   color: var(--accent);
 }
 /* The installation Days table's row menu (2026-11-26): its actions read as a
-   left-aligned list, not centred buttons. Beside the button rules so it wins. */
+   left-aligned list, not centred buttons. Beside the button rules so it wins.
+   Never inside a dialog the menu opens (2026-11-27, user-caught): the
+   dialog lives in the menu's DOM, and these rules stretched its close button
+   across the header and restyled its Save button. */
 .row-menu > span.inline-flex, .row-menu > span { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
-.row-menu.row-menu button, .row-menu.row-menu .btn-ghost { display: flex; justify-content: flex-start; text-align: left; width: 100%; white-space: nowrap; margin: 0; padding: 8px 10px; border-radius: var(--r-sm); }
-.row-menu.row-menu button:hover { background: var(--surface-hover); }
-.row-menu form { min-width: 320px; }
+.row-menu.row-menu button:not(dialog *), .row-menu.row-menu .btn-ghost:not(dialog *) { display: flex; justify-content: flex-start; text-align: left; width: 100%; white-space: nowrap; margin: 0; padding: 8px 10px; border-radius: var(--r-sm); }
+.row-menu.row-menu button:not(dialog *):hover { background: var(--surface-hover); }
+.row-menu form:not(dialog *) { min-width: 320px; }
 .btn-ghost:hover:not(:disabled) {
   background: var(--accent-subtle);
 }

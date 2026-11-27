@@ -21,7 +21,7 @@
  *     draft is still being worked on, nothing to show yet.
  */
 import { db } from "@/lib/db";
-import { formatDate } from "@/lib/format-date";
+import { formatDate, formatDateTime } from "@/lib/format-date";
 import { publicS3Url } from "@/lib/s3";
 import { dealLabel } from "@/lib/deal-scope";
 import type { ChipTone } from "@/components/ui";
@@ -91,8 +91,8 @@ export async function societyDocuments(
           { docType: { in: RELEASE_GATED }, releasedToSocietyAt: { not: null } },
         ],
       },
-      orderBy: [{ period: "desc" }, { uploadedAt: "desc" }],
-      select: { id: true, docType: true, period: true, version: true, fileName: true, byteSize: true, s3Key: true, uploadedAt: true },
+      orderBy: [{ period: "desc" }, { issuedAt: { sort: "desc", nulls: "last" } }, { uploadedAt: "desc" }],
+      select: { id: true, docType: true, period: true, issuedAt: true, version: true, fileName: true, byteSize: true, s3Key: true, uploadedAt: true },
     }),
     db.publishedSavingsReport.findMany({
       where: { societyId, voidedAt: null },
@@ -133,8 +133,14 @@ export async function societyDocuments(
 
   // Only the LATEST version of each slot: superseded versions are the back
   // office's own history, not the society's downloads list.
+  // A gate pass's slot is its own date and time, not its month (2026-11-21):
+  // several in a month are each their own document, so each is listed
+  // (2026-11-27, user-caught — the list kept only one per month).
   const latestDoc = new Map<string, (typeof docs)[number]>();
-  for (const d of docs) if (!latestDoc.has(`${d.docType}|${d.period}`)) latestDoc.set(`${d.docType}|${d.period}`, d);
+  for (const d of docs) {
+    const slot = `${d.docType}|${d.issuedAt ? d.issuedAt.toISOString() : d.period}`;
+    if (!latestDoc.has(slot)) latestDoc.set(slot, d);
+  }
   const latestPublished = new Map<string, (typeof published)[number]>();
   for (const r of published) if (!latestPublished.has(`${r.circuitId}|${r.period}`)) latestPublished.set(`${r.circuitId}|${r.period}`, r);
   const latestDemo = new Map<string, (typeof demoReports)[number]>();
@@ -148,7 +154,7 @@ export async function societyDocuments(
       docType: d.docType,
       period: d.period,
       title: d.fileName,
-      detail: `filed ${formatDate(d.uploadedAt)} · ${kb(d.byteSize)}${d.version > 1 ? ` · v${d.version}` : ""}`,
+      detail: `${d.issuedAt ? `dated ${formatDateTime(d.issuedAt)} · ` : ""}filed ${formatDate(d.uploadedAt)} · ${kb(d.byteSize)}${d.version > 1 ? ` · v${d.version}` : ""}`,
       portalHref: publicS3Url(d.s3Key),
       adminHref: publicS3Url(d.s3Key),
       external: true,

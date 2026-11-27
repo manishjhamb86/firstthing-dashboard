@@ -78,5 +78,12 @@ export const PERMISSION_OPTIONS: {
     label: "Approve visits",
     scope: "Approve or send back relationship managers' logged society visits, so they count for the month. Never one's own.",
   },
+  // Added 2026-11-27. Customer support take the crew's next days from the
+  // society; this lets them add them without pipeline or field access.
+  {
+    value: "add_installation_days",
+    label: "Add and correct installation days",
+    scope: "Open a deal's installation page, add planned days and correct their dates and quantities (not delete them), until the installation is marked finished.",
+  },
 
 ];

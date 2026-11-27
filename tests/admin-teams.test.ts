@@ -141,9 +141,9 @@ describe("the permissions a team's own work needs", () => {
     expect(TEAM_PERMISSIONS.finance).toEqual(["release_billing"]);
   });
 
-  it("support gets nothing, because it has no assignable work yet", () => {
-    expect(TEAM_PERMISSIONS.support).toEqual([]);
-    expect(missingTeamPermissions("support", [])).toEqual([]);
+  it("support adds installation days, and needs nothing else", () => {
+    expect(TEAM_PERMISSIONS.support).toEqual(["add_installation_days"]);
+    expect(missingTeamPermissions("support", ["add_installation_days"])).toEqual([]);
   });
 
   it("names what a selection is missing for its team", () => {
@@ -162,6 +162,7 @@ describe("the permissions a team's own work needs", () => {
       "manage_pipeline",
       "manage_survey",
       "release_billing",
+      "add_installation_days",
     ]);
     for (const perms of Object.values(TEAM_PERMISSIONS)) {
       for (const p of perms) expect(known.has(p)).toBe(true);

@@ -70,6 +70,11 @@ enum AdminPermission {
   // visit so it counts. Never one's own — refused at the decision.
   approve_visits
 
+  // Installation planned days (2026-11-27): opens a deal's installation page
+  // and adds a planned day, without pipeline or field access — for customer
+  // support, who take the crew's schedule from the society.
+  add_installation_days
+
   @@map("admin_permission")
 }
 

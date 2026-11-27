@@ -517,9 +517,12 @@ export function PlannedDayActions({
   startTime,
   plannedCount,
   logged = null,
+  canDelete = true,
 }: {
   pipelineId: string;
   plannedDayId: string;
+  /** Deleting a day needs pipeline or field access; the add-days permission corrects only. */
+  canDelete?: boolean;
   /** YYYY-MM-DD */
   plannedDate: string;
   /** HH:MM */
@@ -556,9 +559,11 @@ export function PlannedDayActions({
           Installed count
         </button>
       )}
-      <button type="button" className="btn-ghost btn-sm" style={{ color: "var(--bad-fg)" }} onClick={() => setOpen("delete")}>
-        Delete day
-      </button>
+      {canDelete && (
+        <button type="button" className="btn-ghost btn-sm" style={{ color: "var(--bad-fg)" }} onClick={() => setOpen("delete")}>
+          Delete day
+        </button>
+      )}
 
       {logged && (
         <Modal open={open === "installed"} onClose={close} title="Correct the lights installed">

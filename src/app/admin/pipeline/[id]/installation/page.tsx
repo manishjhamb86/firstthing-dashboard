@@ -61,7 +61,8 @@ function time(d: Date) {
 export default async function InstallationPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireAdminPage();
   const perms = session.user.adminPermissions ?? [];
-  if (!perms.includes("manage_pipeline") && !perms.includes("manage_survey")) redirect("/admin");
+  const canAddDaysPerm = perms.includes("add_installation_days");
+  if (!perms.includes("manage_pipeline") && !perms.includes("manage_survey") && !canAddDaysPerm) redirect("/admin");
   const isOps = perms.includes("manage_pipeline") && perms.includes("manage_survey");
   const isField = perms.includes("manage_survey");
   // Correcting a recorded date (2026-09-27): data entry before go-live, an
@@ -133,7 +134,12 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
   if (!pipeline) notFound();
 
   const project = pipeline.installationProject;
-  if (project?.certificate) canCorrectDates = isSuperAdmin(session.user.email);
+  // Locked once the installation is marked finished (its final phase signed
+  // off) — the same test the server's correction gate applies. A first phase's
+  // certificate alone does not lock it: later phases still need their days.
+  const installationFinished = (project?.phases ?? []).some((ph) => ph.isFinal);
+  if (installationFinished) canCorrectDates = isSuperAdmin(session.user.email);
+  const canAddPlannedDay = canCorrectDates || (canAddDaysPerm && !installationFinished);
   const surveyed = (pipeline.siteSurvey?.areas ?? []).reduce((n, a) => n + a.count, 0);
   // A demo circuit's own lights are replaced before the full crew ever
   // arrives (2026-10-17, user-asked, then corrected): shown as its own
@@ -617,9 +623,10 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                     logged?.state === "disputed" && isField && <ReopenBatchControl key="reopen" pipelineId={pipeline.id} batchId={logged.id} />,
                   ].filter(Boolean);
                   const menuItems = [
-                    d && canCorrectDates && (
+                    d && canAddPlannedDay && (
                       <PlannedDayActions
                         key="plan"
+                        canDelete={canCorrectDates}
                         logged={logged?.submittedAt ? { batchId: logged.id, installedCount: logged.installedCount } : null}
                         pipelineId={pipeline.id}
                         plannedDayId={d.id}
@@ -628,7 +635,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                         plannedCount={d.plannedCount}
                       />
                     ),
-                    canCorrectDates && logged?.submittedAt && (
+                    canAddPlannedDay && logged?.submittedAt && (
                       <CorrectDatesControl
                         key="dates"
                         kind="batch"
@@ -725,7 +732,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
               </tbody>
             </table>
           </div>
-          {canCorrectDates && (
+          {canAddPlannedDay && (
             <AddPlannedDayForm pipelineId={pipeline.id} areas={[...new Set(project.plannedDays.map((d) => d.areaKey))]} />
           )}
           {[...dayGates.values()].some((g) => !g.canStart) && (

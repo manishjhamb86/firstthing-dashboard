@@ -78,9 +78,9 @@ export const TEAM_PERMISSIONS: Record<AdminTeam, AdminPermission[]> = {
   sales: ["manage_pipeline"],
   engineering: ["manage_survey"],
   inspection: ["manage_survey"],
-  // Society queries — no assignable work of its own yet, so no permission
-  // would be honest rather than a placeholder grant.
-  support: [],
+  // Society queries, and the crew's next installation days taken from the
+  // society (2026-11-27).
+  support: ["add_installation_days"],
   // CON-33: deliberately the ONLY thing finance holds. An account that can
   // run a month must not be able to release its own output.
   finance: ["release_billing"],

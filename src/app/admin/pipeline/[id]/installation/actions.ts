@@ -485,7 +485,7 @@ export async function signPhase(pipelineId: string, input: PhaseInput) {
 // back. In demo mode anyone doing the data entry may correct them; once live,
 // operations only, with a reason. Every old value goes to the change log.
 
-async function dateCorrector(reason: string, pipelineId: string, what: string) {
+async function dateCorrector(reason: string, pipelineId: string, what: string, opts: { allowAddDays?: boolean } = {}) {
   const admin = await resolveAdmin();
   if (!admin) return { error: "Your session has ended. Sign in again." as const };
   const perms = admin.permissions;
@@ -496,7 +496,8 @@ async function dateCorrector(reason: string, pipelineId: string, what: string) {
   const finished = await db.installationPhase.findFirst({ where: { project: { pipelineId }, isFinal: true }, select: { id: true } });
   const refusal = refuseInstallationCorrector({
     demo: await isDemoMode(),
-    canOpenInstallation: perms.includes("manage_survey") || perms.includes("manage_pipeline"),
+    canOpenInstallation:
+      perms.includes("manage_survey") || perms.includes("manage_pipeline") || (!!opts.allowAddDays && perms.includes("add_installation_days")),
     certified: !!finished,
     superAdmin: isSuperAdmin(admin.email),
     reason,
@@ -551,7 +552,7 @@ export async function correctBatchDates(
   batchId: string,
   input: { workedOn?: string; approvedOn?: string; reason: string },
 ) {
-  const who = await dateCorrector(input.reason, pipelineId, "batch");
+  const who = await dateCorrector(input.reason, pipelineId, "batch", { allowAddDays: true });
   if ("error" in who) return who;
 
   const project = await loadDates(pipelineId);
@@ -620,7 +621,7 @@ export async function correctPlannedDayDate(
   plannedDayId: string,
   input: { plannedDate: string; startTime?: string; reason: string },
 ) {
-  const who = await dateCorrector(input.reason, pipelineId, "planned_day");
+  const who = await dateCorrector(input.reason, pipelineId, "planned_day", { allowAddDays: true });
   if ("error" in who) return who;
 
   const day = await db.installationPlannedDay.findUnique({
@@ -668,7 +669,7 @@ export async function correctPlannedDayCount(
   plannedDayId: string,
   input: { plannedCount: number; reason: string },
 ) {
-  const who = await dateCorrector(input.reason, pipelineId, "planned_day_count");
+  const who = await dateCorrector(input.reason, pipelineId, "planned_day_count", { allowAddDays: true });
   if ("error" in who) return who;
 
   const day = await db.installationPlannedDay.findUnique({
@@ -726,7 +727,7 @@ export async function correctBatchInstalledCount(
   batchId: string,
   input: { installedCount: number; reason: string },
 ) {
-  const who = await dateCorrector(input.reason, pipelineId, "batch_installed_count");
+  const who = await dateCorrector(input.reason, pipelineId, "batch_installed_count", { allowAddDays: true });
   if ("error" in who) return who;
 
   if (!Number.isInteger(input.installedCount) || input.installedCount <= 0) {
@@ -874,7 +875,7 @@ export async function deletePlannedDay(pipelineId: string, plannedDayId: string,
 
 /** Re-enter a day the same way setup itself creates one — day/area/date/count, matching `PlannedDayInput`. */
 export async function addPlannedDay(pipelineId: string, input: PlannedDayInput & { reason: string }) {
-  const who = await dateCorrector(input.reason, pipelineId, "planned_day");
+  const who = await dateCorrector(input.reason, pipelineId, "planned_day", { allowAddDays: true });
   if ("error" in who) return who;
 
   const project = await db.installationProject.findUnique({ where: { pipelineId }, select: { id: true } });

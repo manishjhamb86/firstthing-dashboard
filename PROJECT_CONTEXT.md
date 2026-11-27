@@ -10032,3 +10032,21 @@ card and the contact band always show. There is one Save, disabled until somethi
 operations; anyone else sees the settings read-only. The society page's card became a summary with a link to the
 editor. Verified on dev in a browser: hiding the story and the members took the story off the public page while the
 certificate stayed; showing them brought it back.
+
+## The Documents page redesigned (2026-11-27) — user-asked, designed first
+
+Designed on the canvas "Documents page" (https://claude.ai/artifact/PZrS5ko3kSWEFWVuxhWCtv), then built.
+**Step 1, "What are you filing?"** — the type dropdown became tiles in three groups (KYC · Agreements & bills · Past
+reports & site papers). Each tile has an icon and one line on what happens to the file (`doc-type-display.ts`). The
+catalog still decides validity and routing. **Only types filed here are offered:** the meter export and the filed
+invoice copy have `uploadHere: false`. They used to sit in the dropdown and lead only to a pointer, and the user
+asked why the meter export was offered at all. They now appear in one "Not here:" line naming their own screens. A
+link that arrives with one of them in `?type=` still shows the pointer. Picking a tile folds the grid into one bar with
+**Change**, so step 2 sits directly beneath it: the user found the note invisible under eleven tiles. **Step 2,
+"Which society, and when?"**, holds the operation note, a society typeahead (`SearchSelect`, name plus location), the
+month (or the issued date and time for a gate pass), the file drop with the accepted types, and the one Upload & file
+button. All the existing checks (presign, the client-side and server-side sniff, the gate-pass read-back) are
+unchanged. **Recently filed** (`recently-filed.tsx`) groups entries by the India day they were filed. Each entry has
+its type's icon, a Filed / Withdrawn chip, its file, time and who filed it, and a search box. The header counts what
+was filed and withdrawn in the last 7 days. Verified on dev at 1280px and 390px with no console errors: nine tiles
+and no meter tile, the gate pass showing a datetime field with the note in view, and Change bringing the tiles back.

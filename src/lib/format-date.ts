@@ -221,3 +221,13 @@ export function certificateDate(d: Date | string | null | undefined): string {
   if (!date) return "—";
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", ...UTC });
 }
+
+/** "7 October 2026" — the India calendar day a machine instant fell on. */
+export function istDayHeading(d: Date): string {
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: IST });
+}
+
+/** "09:49" — the India wall-clock time of a machine instant. */
+export function istTime(d: Date): string {
+  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: IST });
+}

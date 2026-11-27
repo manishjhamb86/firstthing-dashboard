@@ -1,14 +1,18 @@
 import { circuitName } from "@/lib/circuit-label";
-import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
-import { Card, CardTitle, PageHeader } from "@/components/ui";
+import { PageHeader } from "@/components/ui";
 import { DOCUMENT_TYPES } from "@/lib/document-catalog";
-import { formatDateTime, formatInstant } from "@/lib/format-date";
+import { formatDateTime, istDayHeading, istTime } from "@/lib/format-date";
 import { DocumentUploadClient } from "./upload-client";
-import { WithdrawButton } from "./withdraw-button";
+import { RecentlyFiled } from "./recently-filed";
 
 export const dynamic = "force-dynamic";
+
+/** The start of the "this week" count — a request-time instant, outside render. */
+function sevenDaysAgo(): Date {
+  return new Date(new Date().getTime() - 7 * 86_400_000);
+}
 export const metadata = { title: "Documents" };
 
 /**
@@ -28,7 +32,8 @@ export default async function DocumentsPage({
   // the type and society already chosen.
   const sp = await searchParams;
 
-  const [societies, pipelines, circuits, recent] = await Promise.all([
+  const weekAgo = sevenDaysAgo();
+  const [societies, pipelines, circuits, recent, filedThisWeek, withdrawnThisWeek] = await Promise.all([
     db.society.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, location: true } }),
     db.pipeline.findMany({
       orderBy: { createdAt: "desc" },
@@ -46,6 +51,8 @@ export default async function DocumentsPage({
       take: 40,
       include: { society: { select: { name: true } }, uploadedBy: { select: { email: true, name: true } } },
     }),
+    db.storedDocument.count({ where: { uploadedAt: { gte: weekAgo } } }),
+    db.storedDocument.count({ where: { voidedAt: { gte: weekAgo } } }),
   ]);
 
   const label = (id: string) => DOCUMENT_TYPES.find((t) => t.id === id)?.label ?? id;
@@ -54,11 +61,23 @@ export default async function DocumentsPage({
     <>
       <PageHeader
         title="Documents"
-        subtitle="File any document here — the system checks it really is what you say it is before accepting it."
+        subtitle="File a document against a society. The system checks the file really is what you say before accepting it."
+        chip={
+          <span className="flex flex-wrap gap-2 text-[13px] font-normal" style={{ color: "var(--text-muted)" }}>
+            <span className="rounded-full border px-3 py-1" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+              <b style={{ color: "var(--text)" }}>{filedThisWeek}</b> filed this week
+            </span>
+            {withdrawnThisWeek > 0 && (
+              <span className="rounded-full border px-3 py-1" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+                <b style={{ color: "var(--text)" }}>{withdrawnThisWeek}</b> withdrawn
+              </span>
+            )}
+          </span>
+        }
       />
 
-      <div className="grid max-w-[1180px] gap-5 lg:grid-cols-12">
-        <Card className="p-6 lg:col-span-7">
+      <div className="flex flex-wrap items-start gap-5">
+        <div className="min-w-0" style={{ flex: "999 1 520px" }}>
           <DocumentUploadClient
             canUpload={Boolean(actor?.permissions.includes("manage_pipeline"))}
             initialTypeId={DOCUMENT_TYPES.some((t) => t.id === sp.type) ? sp.type : undefined}
@@ -76,7 +95,7 @@ export default async function DocumentsPage({
               uploadHere: t.uploadHere,
               handledAt: t.handledAt ?? null,
             }))}
-            societies={societies.map((s) => ({ id: s.id, label: `${s.name} — ${s.location}` }))}
+            societies={societies.map((s) => ({ id: s.id, label: s.name, sublabel: s.location }))}
             pipelines={pipelines.map((p) => ({
               id: p.id,
               societyId: p.societyId,
@@ -88,44 +107,24 @@ export default async function DocumentsPage({
               label: circuitName(c),
             }))}
           />
-        </Card>
-
-        <Card className="p-6 lg:col-span-5">
-          <CardTitle>Recently filed</CardTitle>
-          {recent.length === 0 ? (
-            <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-              Nothing filed here yet. Documents that belong to a workflow — KYC files, meter exports —
-              appear on that workflow&apos;s own screen instead.
-            </p>
-          ) : (
-            <ul className="space-y-3 text-[13px]">
-              {recent.map((d) => (
-                <li key={d.id} className="border-b pb-2.5 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
-                  <Link
-                    href={`/admin/documents/${d.id}`}
-                    className="font-semibold"
-                    style={d.voidedAt ? { textDecoration: "line-through" } : undefined}
-                  >
-                    {label(d.docType)} <span className="num">v{d.version}</span> →
-                  </Link>
-                  <p style={{ color: "var(--text-muted)" }}>
-                    {d.society.name} · <span className="num">{d.issuedAt ? formatDateTime(d.issuedAt) : d.period}</span>
-                  </p>
-                  <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>
-                    {d.fileName} · {formatInstant(d.uploadedAt)} · {d.uploadedBy.name ?? d.uploadedBy.email}
-                  </p>
-                  {d.voidedAt ? (
-                    <p className="text-[11px]" style={{ color: "var(--warn-fg)" }}>
-                      Withdrawn — {d.voidReason}
-                    </p>
-                  ) : (
-                    <WithdrawButton documentId={d.id} version={d.version} />
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+        </div>
+        <div className="min-w-0" style={{ flex: "1 1 340px" }}>
+          <RecentlyFiled
+            rows={recent.map((d) => ({
+              id: d.id,
+              docType: d.docType,
+              label: label(d.docType),
+              version: d.version,
+              society: d.society.name,
+              when: d.issuedAt ? formatDateTime(d.issuedAt) : d.period,
+              fileName: d.fileName,
+              day: istDayHeading(d.uploadedAt),
+              time: istTime(d.uploadedAt),
+              by: d.uploadedBy.name ?? d.uploadedBy.email,
+              withdrawn: d.voidedAt ? { reason: d.voidReason } : null,
+            }))}
+          />
+        </div>
       </div>
     </>
   );

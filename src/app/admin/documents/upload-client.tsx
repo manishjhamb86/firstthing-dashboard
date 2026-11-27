@@ -4,7 +4,9 @@ import { FileDrop } from "@/components/file-drop";
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ErrorText, Field } from "@/components/ui";
+import { Card, ErrorText, Field } from "@/components/ui";
+import { SearchSelect } from "@/components/search-select";
+import { DOC_GROUPS, docTypeDisplay } from "./doc-type-display";
 import { validateDocumentUpload } from "@/lib/document-catalog";
 import { extractGatePassFields, finalizeDocument, presignDocument, type GatePassCheck } from "./actions";
 
@@ -98,48 +100,118 @@ export function DocumentUploadClient({
 
   if (!canUpload) {
     return (
-      <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-        Filing documents needs the manage pipeline permission.
-      </p>
+      <Card className="p-6">
+        <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+          Filing documents needs the manage pipeline permission.
+        </p>
+      </Card>
     );
   }
 
+  function pickType(id: string) {
+    setTypeId(id);
+    setContextId("");
+    setError(null);
+    setDone(null);
+    setGatePassPendingKey(null);
+    setGatePassWarning(null);
+  }
+
+  // The picker offers only what is filed HERE (2026-11-27): a meter export
+  // and a filed invoice copy have their own screens, named under the tiles.
+  const filable = types.filter((t) => t.uploadHere);
+  const groups = DOC_GROUPS.map((g) => ({ label: g, items: filable.filter((t) => docTypeDisplay(t.id).group === g) })).filter((g) => g.items.length > 0);
+  const elsewhere = types.filter((t) => !t.uploadHere);
+  const shown = spec ? docTypeDisplay(spec.id) : null;
+
   return (
-    <div className="space-y-4">
-      <Field label="Document type" htmlFor="doc-type" hint="What it is decides what a valid file looks like.">
-        <select
-          id="doc-type"
-          className="field"
-          value={typeId}
-          onChange={(e) => {
-            setTypeId(e.target.value);
-            setContextId("");
-            setError(null);
-            setDone(null);
-          }}
-        >
-          <option value="">Choose a document type…</option>
-          {types.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      {spec && (
-        <div
-          className="rounded-[var(--r-md)] border p-3.5 text-[13px]"
-          style={{ borderColor: "var(--accent-line)", background: "var(--accent-subtle)" }}
-        >
-          <p>{spec.operation}</p>
-          <p className="mt-1.5 text-[12px]" style={{ color: "var(--text-muted)" }}>
-            Accepts {spec.acceptedExtensions.map((e) => `.${e}`).join(", ")} · up to{" "}
-            <span className="num">{spec.maxMb}</span> MB
-          </p>
+    <div className="space-y-5">
+      <Card className="p-6">
+        <div className="flex items-center gap-2.5">
+          <StepNo n={1} />
+          <h2 className="text-[17px] font-bold">What are you filing?</h2>
         </div>
-      )}
+        {spec && shown ? (
+          <div
+            className="mt-4 flex flex-wrap items-center gap-3 rounded-[var(--r-md)] border-[1.5px] px-3.5 py-3"
+            style={{ borderColor: "var(--accent)", background: "var(--accent-subtle)" }}
+          >
+            <TypeIcon d={shown.icon} active />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">{spec.label}</p>
+              <p className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                {shown.group ?? "Filed on its own screen"}
+              </p>
+            </div>
+            <button type="button" className="btn-ghost btn-sm" onClick={() => pickType("")}>
+              Change
+            </button>
+          </div>
+        ) : (
+          <div className="mt-4 space-y-5">
+            {groups.map((g) => (
+              <div key={g.label}>
+                <p className="lbl mb-2">{g.label}</p>
+                <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
+                  {g.items.map((t) => {
+                    const d = docTypeDisplay(t.id);
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => pickType(t.id)}
+                        className="flex min-h-[64px] items-start gap-3 rounded-[var(--r-md)] border px-3.5 py-3 text-left hover:border-[var(--accent-line)] hover:bg-[var(--surface-hover)]"
+                        style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+                      >
+                        <TypeIcon d={d.icon} />
+                        <span className="min-w-0">
+                          <span className="block font-semibold">{t.label}</span>
+                          <span className="block text-[12px] leading-snug" style={{ color: "var(--text-subtle)" }}>
+                            {d.short}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            {elsewhere.length > 0 && (
+              <p className="border-t pt-3.5 text-[13px]" style={{ borderColor: "var(--border-subtle)", color: "var(--text-muted)" }}>
+                Not here:{" "}
+                {elsewhere.map((t, i) => (
+                  <span key={t.id}>
+                    {i > 0 ? "; " : ""}
+                    {t.label.toLowerCase()} — {(t.handledAt ?? "").replace(/\.$/, "")}
+                  </span>
+                ))}
+                .
+              </p>
+            )}
+          </div>
+        )}
+      </Card>
 
+      {!spec ? (
+        <p className="rounded-[var(--r-md)] border border-dashed px-5 py-4 text-center text-[13px]" style={{ borderColor: "var(--border)", color: "var(--text-subtle)" }}>
+          Pick a document type above — the society, month and file come next.
+        </p>
+      ) : (
+      <Card className="space-y-4 p-6">
+        <div className="flex items-center gap-2.5">
+          <StepNo n={2} />
+          <h2 className="text-[17px] font-bold">{spec.uploadHere ? "Which society, and when?" : "Where this is filed"}</h2>
+        </div>
+        <div
+          className="flex gap-2.5 rounded-[var(--r-md)] border p-3.5 text-[13px]"
+          style={{ borderColor: "var(--info-line)", background: "var(--info-bg)", color: "var(--info-fg)" }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden className="mt-0.5 shrink-0">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 11v5M12 8h.01" />
+          </svg>
+          <span>{spec.operation}</span>
+        </div>
       {spec && !spec.uploadHere ? (
         // Half-doing an operation is worse than naming where it belongs.
         <p className="text-[13px]" style={{ color: "var(--warn-fg)" }}>
@@ -149,24 +221,18 @@ export function DocumentUploadClient({
         <>
           {/* Society first, always. Everything else narrows to it. */}
           <Field label="Society" htmlFor="doc-society">
-            <select
+            <SearchSelect
               id="doc-society"
-              className="field"
-              value={societyId}
-              onChange={(e) => {
-                setSocietyId(e.target.value);
+              options={societies}
+              value={societyId || null}
+              placeholder="Type a society's name…"
+              onCommit={(id) => {
+                setSocietyId(id ?? "");
                 setContextId("");
                 setError(null);
                 setGatePassWarning(null);
               }}
-            >
-              <option value="">Choose the society…</option>
-              {societies.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+            />
           </Field>
 
           {spec.context !== "society" && societyId && (
@@ -258,7 +324,11 @@ export function DocumentUploadClient({
             </Field>
           )}
 
-          <Field label="File" htmlFor="doc-file">
+          <Field
+            label="File"
+            htmlFor="doc-file"
+            hint={`Accepts ${spec.acceptedExtensions.map((e) => `.${e}`).join(", ")} · up to ${spec.maxMb} MB`}
+          >
             <FileDrop
               id="doc-file"
               accept={spec.acceptedExtensions.map((e) => `.${e}`).join(",")}
@@ -426,6 +496,32 @@ export function DocumentUploadClient({
           </button>
         </>
       ) : null}
+      </Card>
+      )}
     </div>
+  );
+}
+
+function StepNo({ n }: { n: number }) {
+  return (
+    <span
+      className="inline-grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full text-[13px] font-bold"
+      style={{ background: "var(--accent)", color: "var(--text-on-accent)" }}
+    >
+      {n}
+    </span>
+  );
+}
+
+function TypeIcon({ d, active = false }: { d: string; active?: boolean }) {
+  return (
+    <span
+      className="inline-grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px]"
+      style={active ? { background: "var(--accent)", color: "var(--text-on-accent)" } : { background: "var(--neu-bg)", color: "var(--text-muted)" }}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d={d} />
+      </svg>
+    </span>
   );
 }

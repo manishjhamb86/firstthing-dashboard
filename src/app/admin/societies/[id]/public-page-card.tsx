@@ -81,7 +81,7 @@ export function PublicPageCard({
             )}
           </div>
           <p className="mt-2 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
-            {initial.showLeadership ? "Names the society's current office-bearers." : "Office-bearers are not named."}
+            {initial.showLeadership ? "Names the society's RWA members." : "RWA members are not named."}
             {initial.intro ? " Uses the RWA's own story." : " Uses the standard story."}
           </p>
           {canEdit && (
@@ -113,9 +113,10 @@ export function PublicPageCard({
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" className="mt-1" checked={showLeadership} onChange={(e) => setShowLeadership(e.target.checked)} />
             <span>
-              Name the current office-bearers
+              Name the society&apos;s RWA members
               <span className="block text-[12px]" style={{ color: "var(--text-subtle)" }}>
-                Only with the RWA&apos;s permission. Names and positions from the member register; never phone numbers.
+                Current members&apos; names and positions from the member register; never phone numbers. Untick if the
+                society does not want them shown.
               </span>
             </span>
           </label>

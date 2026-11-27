@@ -54,7 +54,10 @@ export const loadSocietyPublicPage = cache(async (rawSlug: string): Promise<{ pa
     loadSocietyPumpSavings(s.id).catch(() => null),
     publishedMonthsFor(s.id),
     db.testimonial.findFirst({
-      where: { societyId: s.id, status: "published", consentAt: { not: null } },
+      // Published is the approval — the same rule as the homepage, so a
+      // testimonial added in the back office shows too, not only one a
+      // member submitted (with its consent) from the portal.
+      where: { societyId: s.id, status: "published" },
       orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
       select: { quote: true, authorName: true, authorRole: true, authorPhotoKey: true, buildingPhotoKey: true },
     }),

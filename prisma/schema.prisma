@@ -359,9 +359,10 @@ model Society {
   publicSlug                    String?       @unique @map("public_slug")
   publicSlugKey                 String?       @unique @map("public_slug_key")
   publicPageEnabled             Boolean       @default(true) @map("public_page_enabled")
-  /// Names and positions of current RWA office-bearers — only with the
-  /// society's permission, so off until someone turns it on.
-  publicShowLeadership          Boolean       @default(false) @map("public_show_leadership")
+  /// Names and positions of the society's current members on its public
+  /// page — on by default (the user's call, 2026-11-27); switched off for a
+  /// society that does not want them shown. Never phone numbers.
+  publicShowLeadership          Boolean       @default(true) @map("public_show_leadership")
   /// The RWA-approved story paragraph; null shows the standard one.
   publicIntro                   String?       @map("public_intro")
   /// The date on the page's certificate of recognition.

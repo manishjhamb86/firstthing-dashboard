@@ -9990,10 +9990,10 @@ stage.
   - the number of water tanks monitored;
   - for pump-room automation, the percentage less electricity per kilolitre;
 - energy impact, from released months only: kWh saved, % saving, months verified, and the pump room's kWh saved;
-- the society's latest published testimonial, which already carries the member's consent, with its building photo as
+- the society's latest published testimonial (published is the approval, as on the homepage), with its building photo as
   the page photo (otherwise a monogram panel, never a stock photo of some other building);
-- RWA office-bearers by name and position only, and only when `publicShowLeadership` is on (off by default; the
-  society's permission);
+- RWA members by name and position only, while `publicShowLeadership` is on (on by default since the user asked the same day; the
+  switch hides them for a society that does not want them shown);
 - a printable certificate of recognition dated `publicPagePublishedAt`.
 
 The page shows no rupee figures and no phone numbers. A terminated society or a page switched off answers 404. The page

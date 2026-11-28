@@ -264,7 +264,9 @@ export default async function PortalInventoryPage() {
                         </details>
                       )}
                       <div className="mt-1 flex flex-col">
-                        {c.devices.map((d) => (
+                        {/* Only what FirsThing installed (2026-11-28, user-asked): a fixture
+                          kept or not yet replaced is not FirsThing's to list. */}
+                          {c.devices.filter((d) => !d.excludedFromCalculation && installedCount(c, d) > 0).map((d) => (
                           <div
                             key={d.id}
                             className="flex flex-wrap items-center justify-between gap-3 py-2.5"

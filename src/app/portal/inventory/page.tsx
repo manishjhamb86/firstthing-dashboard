@@ -14,6 +14,7 @@ import { InventoryByCategory, InventorySummary } from "@/components/inventory-by
 import { inventoryByCategory } from "@/lib/inventory-categories";
 import { loadSiteStock } from "@/lib/stock-workflow-loader";
 import { lightsByFitting } from "@/lib/lights-by-fitting";
+import { installedFullByCircuit } from "@/lib/installed-full";
 import { installedLightTotals } from "@/lib/society-lights";
 
 
@@ -80,8 +81,11 @@ export default async function PortalInventoryPage() {
     }),
   ]);
   const lightHistoryByCircuit = await circuitLightCountHistoryByCircuit(circuitRows.map((c) => c.id));
+  // Installed, not billed: a deal's logged installation days (installed-full.ts).
+  const installedFull = await installedFullByCircuit(circuitRows);
   const circuits = circuitRows.map(({ demos, ...c }) => ({
     ...c,
+    representedLightCount: installedFull.get(c.id) ?? c.representedLightCount,
     lightReplacementDate:
       demos
         .filter((d) => !d.rejected && d.lightReplacementDate)

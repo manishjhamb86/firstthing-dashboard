@@ -1,3 +1,4 @@
+import { installedFullByCircuit } from "@/lib/installed-full";
 import { db } from "@/lib/db";
 import { demoLightsInstalled } from "@/lib/light-population";
 import { groupCircuitsByDeal } from "@/lib/circuit-deal-group";
@@ -45,6 +46,8 @@ export async function loadSocietyInstalledLights(societyId: string): Promise<{ d
       },
     },
   });
+  // Installed, not billed: a deal's logged installation days (installed-full.ts).
+  const installedFull = await installedFullByCircuit(circuits);
   const rows: InstalledRow[] = [];
   for (const c of circuits) {
     const replaced = c.demos.some((d) => !d.rejected && d.lightReplacementDate);
@@ -56,7 +59,7 @@ export async function loadSocietyInstalledLights(societyId: string): Promise<{ d
       location: c.location,
       lightType: c.lightType,
       demoLights: demoLightsInstalled({ meteredLightCount: c.meteredLightCount, demos: c.demos, devices: c.devices }),
-      fullInstallation: c.representedLightCount,
+      fullInstallation: installedFull.get(c.id) ?? c.representedLightCount,
     });
   }
   return installedLightTotals(rows);

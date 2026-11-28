@@ -14,6 +14,7 @@ import { LightHistoryList } from "@/components/light-history-list";
 import { InstalledStockEditor } from "@/components/installed-stock-editor";
 import { loadSiteStock } from "@/lib/stock-workflow-loader";
 import { lightsByFitting } from "@/lib/lights-by-fitting";
+import { installedFullByCircuit } from "@/lib/installed-full";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Inventory" };
@@ -50,6 +51,7 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
       orderBy: { createdAt: "asc" },
       select: {
         id: true,
+        siteSurveyId: true,
         location: true,
         lightType: true, name: true,
         demos: {
@@ -88,6 +90,8 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
     }),
   ]);
   const lightHistoryByCircuit = await circuitLightCountHistoryByCircuit(circuitRows.map((c) => c.id));
+  // Installed, not billed: a deal's logged installation days (installed-full.ts).
+  const installedFull = await installedFullByCircuit(circuitRows);
   const circuits = circuitRows.map(({ demos, ...c }) => {
     const history = lightHistoryByCircuit.get(c.id) ?? [];
     // The RAW history, not the customer-filtered one — operations manages
@@ -97,6 +101,7 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
     const customerVisibleIds = new Set(filterCustomerRelevant(history).flatMap((h) => h.ids));
     return {
       ...c,
+      representedLightCount: installedFull.get(c.id) ?? c.representedLightCount,
       lightReplacementDate:
         demos
           .filter((d) => !d.rejected && d.lightReplacementDate)
@@ -127,7 +132,7 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
     stock: equipment.filter((e) => e.item.active || e.installed > 0).map((e) => ({ id: e.item.id, name: e.item.name, unit: e.item.unit, category: e.item.category, installed: e.installed })),
     meters: meters.length,
     sensors: sensors.length,
-    includeUnrecorded: canEditStock,
+    includeUnrecorded: false,
   });
   const empty = circuits.length === 0 && meters.length === 0 && tanks.length === 0 && equipment.every((e) => e.installed === 0);
   const SETUP_LABEL: Record<string, string> = { domestic: "Domestic", flush: "Flush", stp: "STP" };

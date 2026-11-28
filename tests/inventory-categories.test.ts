@@ -16,6 +16,15 @@ const base = {
 };
 
 describe("inventory by category", () => {
+  it("never lists a light from the stock ledger", () => {
+    const { groups } = inventoryByCategory({
+      ...base,
+      stock: [...base.stock, { id: "s", name: "surface lights 8 w", unit: "pcs", category: "light", installed: 0 }],
+      includeUnrecorded: true,
+    });
+    expect(groups.flatMap((g) => g.rows).some((r) => r.name === "surface lights 8 w")).toBe(false);
+  });
+
   it("does not list an empty stock meter beside a connected one", () => {
     const { groups } = inventoryByCategory({
       ...base,

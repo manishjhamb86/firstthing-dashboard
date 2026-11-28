@@ -47,6 +47,8 @@ export function inventoryByCategory(input: {
   const countedByDevice = (st: (typeof input.stock)[number]) =>
     (input.meters > 0 && st.category === "meter") || (input.sensors > 0 && /tank/i.test(st.name));
   for (const s of input.stock) {
+    // Lights come from the installation record only, never the stock ledger.
+    if (s.category === "light") continue;
     if (s.installed <= 0 && (!input.includeUnrecorded || countedByDevice(s))) continue;
     rows.push({
       key: `stock:${s.id}`,

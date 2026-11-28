@@ -155,7 +155,7 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
           <InventoryByCategory
             groups={byCategory.groups}
             setHref={canEditStock ? "#equipment" : undefined}
-            note="Lights: the full installation plus the demo lights, the figure the bill uses — correct a count on its circuit. Other devices: stock issued to the society, or the count set below."
+            note="Lights: what FirsThing installed — the lights logged on the installation days plus the demo lights. A phased installation bills only what is signed off so far. Other devices: stock issued to the society, or the count set below."
           />
 
           {circuits.some((c) => c.devices.length > 0) && (
@@ -240,9 +240,8 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
               {fullLights > 0 && (
                 <p className="mt-4 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
                   Installed is the full installation plus the demo lights — the demo lights went in first
-                  and are not part of the full installation, and together they are what the bill is
-                  computed on. The lines beneath are the fittings on the metered circuit itself, which is
-                  what the readings are taken from.
+                  and are not part of the full installation. The lines beneath are the fittings FirsThing
+                  replaced on the metered circuit, which is what the readings are taken from.
                 </p>
               )}
             </Card>

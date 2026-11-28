@@ -32,7 +32,9 @@ export function fittingOf(c: FittingCircuit): string {
   return main.replacementType ? fittingLabel(main.replacementWattage ?? main.wattage, main.replacementType.name) : fittingLabel(main.wattage, main.deviceType.name);
 }
 
-export function lightsByFitting(circuits: FittingCircuit[]): Array<{ fitting: string; count: number }> {
+/** Each fitting with its demo lights and full installation (2026-11-28,
+ *  user-asked: "20W batten: demo lights + full installation"). */
+export function lightsByFitting(circuits: FittingCircuit[]): Array<{ fitting: string; count: number; demo: number; full: number }> {
   const installed = circuits.filter((c) => c.lightReplacementDate && meteredOf(c) > 0);
   const { groups, solo } = groupCircuitsByDeal(
     installed.map((c) => ({
@@ -47,15 +49,18 @@ export function lightsByFitting(circuits: FittingCircuit[]): Array<{ fitting: st
     })),
   );
   const byId = new Map(installed.map((c) => [c.id, c]));
-  const out = new Map<string, number>();
-  const add = (fitting: string, n: number) => out.set(fitting, (out.get(fitting) ?? 0) + n);
+  const out = new Map<string, { count: number; demo: number; full: number }>();
+  const add = (fitting: string, full: number, demo: number) => {
+    const cur = out.get(fitting) ?? { count: 0, demo: 0, full: 0 };
+    out.set(fitting, { count: cur.count + totalLights(full, demo), demo: cur.demo + demo, full: cur.full + full });
+  };
   for (const g of groups) {
     const full = g.fullInstallationDisagreement ? Math.max(...g.fullInstallationDisagreement) : g.members[0]!.fullInstallation;
-    add(fittingOf(byId.get(g.members[0]!.id)!), totalLights(full, g.combinedDemoLights));
+    add(fittingOf(byId.get(g.members[0]!.id)!), full, g.combinedDemoLights);
   }
   for (const s of solo) {
     const c = byId.get(s.id)!;
-    add(fittingOf(c), totalLights(c.representedLightCount, c.demoLights));
+    add(fittingOf(c), c.representedLightCount, c.demoLights);
   }
-  return [...out.entries()].map(([fitting, count]) => ({ fitting, count })).sort((a, b) => b.count - a.count);
+  return [...out.entries()].map(([fitting, v]) => ({ fitting, ...v })).sort((a, b) => b.count - a.count);
 }

@@ -71,17 +71,17 @@ export function InspectionReportSteps({
   );
 
   return (
-    <ol className="space-y-4">
-      <li className="flex gap-3">
+    <ol className="grid items-start gap-3 sm:grid-cols-2">
+      <li className="flex gap-3 rounded-[var(--r-sm)] border border-[var(--border-subtle)] bg-[var(--surface-sunken)] p-3.5">
         {stepNum(1, stepTwo || !!signedHref)}
         <div className="min-w-0 flex-1">
-          <p className="font-semibold">Download the report</p>
-          <p className="mb-2 text-[13px]" style={{ color: "var(--text-muted)" }}>
-            A PDF of this visit — print it for the society representative to sign and stamp.
+          <p className="font-semibold">Report PDF</p>
+          <p className="mb-2 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+            Print it for the society representative to sign and stamp.
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            <a href={downloadHref} className="btn-secondary inline-flex items-center gap-2" onClick={() => setStepTwo(true)}>
-              <Download size={16} aria-hidden /> Download PDF
+            <a href={downloadHref} className="btn-secondary btn-sm inline-flex items-center gap-1.5" onClick={() => setStepTwo(true)}>
+              <Download size={15} aria-hidden /> Download PDF
             </a>
             {canUpload && !signedHref && !stepTwo && (
               <button type="button" className="text-[13px] font-semibold underline" style={{ color: "var(--accent)" }} onClick={() => setStepTwo(true)}>
@@ -92,11 +92,11 @@ export function InspectionReportSteps({
         </div>
       </li>
 
-      <li className="flex gap-3">
+      <li className="flex gap-3 rounded-[var(--r-sm)] border border-[var(--border-subtle)] bg-[var(--surface-sunken)] p-3.5">
         {stepNum(2, !!signedHref)}
         <div className="min-w-0 flex-1">
           <p className="font-semibold" style={!signedHref && !stepTwo ? { color: "var(--text-subtle)" } : undefined}>
-            Upload the signed copy
+            Signed copy
           </p>
           {signedHref ? (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">

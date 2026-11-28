@@ -10,13 +10,12 @@ import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { hasGrant } from "@/lib/portal-access";
 import { Card, CardTitle, EmptyState, InfoNote, PageHeader } from "@/components/ui";
 import { circuitName } from "@/lib/meter-view";
-import { CompactTile, KpiBubble } from "../kpi-tiles";
-import { Droplets, Lightbulb, Zap } from "lucide-react";
+import { InventoryByCategory, InventorySummary } from "@/components/inventory-by-category";
+import { inventoryByCategory } from "@/lib/inventory-categories";
 import { loadSiteStock } from "@/lib/stock-workflow-loader";
 import { lightsByFitting } from "@/lib/lights-by-fitting";
 import { installedLightTotals } from "@/lib/society-lights";
 
-const CATEGORY_GROUP: Record<string, string> = { network: "Connectivity", meter: "Metering", water: "Water", cable: "Wiring", light: "Lighting" };
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Inventory" };
@@ -125,7 +124,7 @@ export default async function PortalInventoryPage() {
   // group; a disagreement between members takes the larger figure rather
   // than silently averaging it, so the total never reads lower than what
   // was genuinely installed.
-  const { demo: demoLights, full: fullLights, total: societyLights } = installedLightTotals(
+  const { full: fullLights } = installedLightTotals(
     installedRows.map((c) => ({
       id: c.id,
       siteSurveyId: c.siteSurveyId,
@@ -142,12 +141,13 @@ export default async function PortalInventoryPage() {
   // stock installed here. Connected meters and tank sensors are counted from
   // their devices unless stock records that kind of item at the society.
   const siteStock = (await loadSiteStock(societyId)).filter((s) => !s.item.deviceTypeId && s.installed > 0);
-  const byItem: Array<{ name: string; count: number; unit: string; group: string }> = [
-    ...lightsByFitting(circuits).map((f) => ({ name: f.fitting, count: f.count, unit: "pcs", group: "Lighting" })),
-    ...siteStock.map((s) => ({ name: s.item.name, count: s.installed, unit: s.item.unit, group: CATEGORY_GROUP[s.item.category] ?? "Equipment" })),
-  ];
-  if (meters.length > 0 && !siteStock.some((s) => s.item.category === "meter")) byItem.push({ name: "Smart meter", count: meters.length, unit: "pcs", group: "Metering" });
-  if (sensors.length > 0 && !siteStock.some((s) => /tank/i.test(s.item.name))) byItem.push({ name: "Tank level sensor", count: sensors.length, unit: "pcs", group: "Water" });
+  const byCategory = inventoryByCategory({
+    fittings: lightsByFitting(circuits),
+    stock: siteStock.map((e) => ({ id: e.item.id, name: e.item.name, unit: e.item.unit, category: e.item.category, installed: e.installed })),
+    meters: meters.length,
+    sensors: sensors.length,
+    includeUnrecorded: false,
+  });
 
   const empty = circuits.length === 0 && meters.length === 0 && tanks.length === 0 && siteStock.length === 0;
 
@@ -163,51 +163,11 @@ export default async function PortalInventoryPage() {
         </EmptyState>
       ) : (
         <>
-          {/* Below sm: three full KPI tiles stacked a full column tall each
-              (user-caught, 2026-10-07 — "same issue [as Electricity]") — a
-              compact 3-up row carries the same three figures in a fraction
-              of the height; the full detail lines move to sm+. */}
-          <div className="mb-6 grid grid-cols-3 gap-2.5 sm:hidden">
-            <CompactTile tone="ok" value={societyLights.toLocaleString("en-IN")} label="LED lights" />
-            <CompactTile tone="info" value={String(meters.length)} label="Smart meters" />
-            <CompactTile tone="info" value={String(sensors.length)} label="Tank sensors" />
-          </div>
-
-          <div className="mb-6 hidden gap-4 sm:grid sm:grid-cols-3">
-            <KpiBubble
-              icon={Lightbulb}
-              tone="ok"
-              value={societyLights.toLocaleString("en-IN")}
-              label="LED lights installed"
-              detail={
-                fullLights > 0
-                  ? `${fullLights.toLocaleString("en-IN")} in the full installation + ${demoLights.toLocaleString("en-IN")} from the demo`
-                  : `${demoLights.toLocaleString("en-IN")} from the demo`
-              }
-            />
-            <KpiBubble icon={Zap} tone="info" value={String(meters.length)} label="Smart meters" detail="watching your circuits" />
-            <KpiBubble icon={Droplets} tone="info" value={String(sensors.length)} label="Tank level sensors" detail="on your water tanks" />
-          </div>
-
-          {byItem.length > 0 && (
-            <Card className="mb-5 p-6">
-              <CardTitle>By item</CardTitle>
-              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-                {byItem.map((i) => (
-                  <div key={`${i.group}-${i.name}`} className="rounded-[var(--r-md)] border border-[var(--border-subtle)] px-3.5 py-3">
-                    <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
-                      {i.group}
-                    </p>
-                    <p className="text-[13.5px] font-semibold leading-snug">{i.name}</p>
-                    <p className="num mt-1 text-[22px] font-bold leading-none">
-                      {i.count.toLocaleString("en-IN")}
-                      {i.unit === "m" ? <span className="text-[13px] font-semibold"> m</span> : null}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
+          <InventorySummary tiles={byCategory.tiles} />
+          <InventoryByCategory
+            groups={byCategory.groups}
+            note="Lights: the full installation plus the lights fitted during the demo. Questions about a device? Raise a request under Support."
+          />
 
           {circuits.some((c) => c.devices.length > 0) && (
             <Card className="mb-5 p-6">

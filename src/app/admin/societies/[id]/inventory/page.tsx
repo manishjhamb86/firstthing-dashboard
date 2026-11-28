@@ -7,7 +7,9 @@ import { circuitLightCountHistoryByCircuit, describeLightCountChange, filterCust
 import { deviceLabel, fittingLabel, installedCount, meteredOf } from "@/lib/inventory-display";
 import { formatDate } from "@/lib/format-date";
 import { circuitName } from "@/lib/meter-view";
-import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow } from "@/components/ui";
+import { Card, CardTitle, EmptyState, PageHeader } from "@/components/ui";
+import { InventoryByCategory, InventorySummary } from "@/components/inventory-by-category";
+import { inventoryByCategory } from "@/lib/inventory-categories";
 import { LightHistoryList } from "@/components/light-history-list";
 import { InstalledStockEditor } from "@/components/installed-stock-editor";
 import { loadSiteStock } from "@/lib/stock-workflow-loader";
@@ -114,14 +116,19 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
   });
 
   const installedRows = circuits.filter((c) => c.lightReplacementDate && meteredOf(c) > 0);
-  const societyLights = installedRows.reduce((s, c) => s + totalLights(c.representedLightCount, c.demoLights), 0);
-  const demoLights = installedRows.reduce((s, c) => s + c.demoLights, 0);
   const fullLights = installedRows.reduce((s, c) => s + c.representedLightCount, 0);
   const sensors = tanks.filter((t) => t.hasLevelSignal);
 
   const siteStock = await loadSiteStock(societyId);
   const equipment = siteStock.filter((s) => !s.item.deviceTypeId);
   const fittings = lightsByFitting(circuits);
+  const byCategory = inventoryByCategory({
+    fittings,
+    stock: equipment.filter((e) => e.item.active || e.installed > 0).map((e) => ({ id: e.item.id, name: e.item.name, unit: e.item.unit, category: e.item.category, installed: e.installed })),
+    meters: meters.length,
+    sensors: sensors.length,
+    includeUnrecorded: canEditStock,
+  });
   const empty = circuits.length === 0 && meters.length === 0 && tanks.length === 0 && equipment.every((e) => e.installed === 0);
   const SETUP_LABEL: Record<string, string> = { domestic: "Domestic", flush: "Flush", stp: "STP" };
 
@@ -139,38 +146,16 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
         </EmptyState>
       ) : (
         <>
-          <StatRow>
-            <Stat
-              label="LED lights installed"
-              value={societyLights.toLocaleString("en-IN")}
-              detail={
-                fullLights > 0
-                  ? `${fullLights.toLocaleString("en-IN")} full installation + ${demoLights.toLocaleString("en-IN")} demo`
-                  : `${demoLights.toLocaleString("en-IN")} from the demo`
-              }
-            />
-            <Stat label="Smart meters" value={String(meters.length)} detail="watching circuits" />
-            <Stat label="Tank level sensors" value={String(sensors.length)} detail="on water tanks" />
-          </StatRow>
-
-          {fittings.length > 0 && (
-            <Card className="mt-5 p-6">
-              <CardTitle>Lights by fitting</CardTitle>
-              <ul className="flex flex-col divide-y divide-[var(--border-subtle)]">
-                {fittings.map((f) => (
-                  <li key={f.fitting} className="flex items-center justify-between gap-3 py-2.5">
-                    <span className="text-[13.5px] font-medium">{f.fitting}</span>
-                    <span className="num text-[15px] font-bold">{f.count.toLocaleString("en-IN")}</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-2 text-xs text-[var(--text-subtle)]">From the installation record — the full installation plus the demo lights, the figure the bill uses. Correct a light count on its circuit.</p>
-            </Card>
-          )}
+          <InventorySummary tiles={byCategory.tiles} />
+          <InventoryByCategory
+            groups={byCategory.groups}
+            setHref={canEditStock ? "#equipment" : undefined}
+            note="Lights: the full installation plus the demo lights, the figure the bill uses — correct a count on its circuit. Other devices: stock issued to the society, or the count set below."
+          />
 
           {circuits.some((c) => c.devices.length > 0) && (
             <Card className="mb-5 mt-5 p-6">
-              <CardTitle>Lighting</CardTitle>
+              <CardTitle>Lighting by circuit</CardTitle>
               <div className="flex flex-col gap-5">
                 {circuits
                   .filter((c) => c.devices.length > 0)
@@ -306,7 +291,7 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
           )}
         </>
       )}
-      <Card className="mt-5 p-6">
+      <Card className="mt-5 scroll-mt-24 p-6" id="equipment">
         <CardTitle>Other equipment installed</CardTitle>
         <p className="-mt-2 mb-3 text-[13px] text-[var(--text-muted)]">
           Routers, SIM cards, meters, valves and wire at this society, as recorded in stock. For a society installed before stock was tracked, set each count here; it shows on the society&apos;s portal.

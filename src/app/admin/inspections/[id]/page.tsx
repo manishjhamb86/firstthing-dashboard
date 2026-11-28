@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { DEMO_LIGHTS_SELECT, demoLightsInstalled, totalLights } from "@/lib/light-population";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
-import { Card, CardTitle, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
+import { Card, CardTitle, PageHeader, PageRibbon, StatusChip } from "@/components/ui";
 import { formatDateTime, monthLabel } from "@/lib/format-date";
 import { inspectionSummary } from "@/lib/inspection";
 import { publicS3Url } from "@/lib/s3";
@@ -86,6 +86,15 @@ export default async function InspectionDetailPage({
     .filter(Boolean)
     .join(" · ");
 
+  // A note that names a number of lights not working, against a different
+  // count of recorded faults, is worth a second look (2026-11-28).
+  const noted = /(\d+)\s*(?:lights?|fixtures?)?\s*(?:are\s+|is\s+)?(?:not\s+working|faulty|fused|not\s+glowing|off)/i.exec(inspection.notes ?? "");
+  const notedCount = noted ? Number(noted[1]) : null;
+  const noteMismatch =
+    notedCount !== null && notedCount > 0 && notedCount !== summary.faultyLightsCount
+      ? `The note mentions ${notedCount} light${notedCount === 1 ? "" : "s"} not working, but ${summary.faultyLightsCount === 0 ? "no faulty fixtures are" : `${summary.faultyLightsCount} ${summary.faultyLightsCount === 1 ? "is" : "are"}`} recorded below.`
+      : null;
+
   // Every light installed on the circuit's type: full installation + demo lights (2026-09-27).
   const lightsToCheck = inspection.circuit ? totalLights(inspection.circuit.representedLightCount, demoLightsInstalled(inspection.circuit)) : null;
   return (
@@ -118,6 +127,18 @@ export default async function InspectionDetailPage({
           ) : (
             <StatusChip tone="warn">{summary.faultyLightsCount} faulty</StatusChip>
           )
+        }
+        action={
+          !inspection.voidedAt && (inspection.totalLightsChecked !== null && !isEditing || isOperations(actor.team)) ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {inspection.totalLightsChecked !== null && !isEditing && (
+                <Link href={`/admin/inspections/${inspection.id}?edit=1`} className="btn-secondary btn-sm">
+                  Edit inspection
+                </Link>
+              )}
+              {isOperations(actor.team) && <VoidInspectionButton id={inspection.id} />}
+            </div>
+          ) : undefined
         }
       />
 
@@ -192,25 +213,31 @@ export default async function InspectionDetailPage({
         />
       ) : (
         <>
-          <StatRow>
-            <Stat label="Total lights checked" value={summary.totalLightsChecked} />
-            <Stat
-              label="Faulty lights"
-              value={summary.faultyLightsCount}
-              tone={summary.faultyLightsCount > 0 ? "warn" : "ok"}
-            />
-            <Stat label="Faulty %" value={`${summary.faultyPct.toFixed(1)}%`} />
-          </StatRow>
-
-          {inspection.notes && (
-            <p className="mb-6 text-[13.5px]">
-              <span className="lbl mr-1.5">Notes</span>
-              {inspection.notes}
-            </p>
-          )}
+          <section className="card mb-6 grid grid-cols-2 overflow-hidden sm:grid-cols-4">
+            <div className="border-[var(--border-subtle)] px-5 py-4 sm:border-r">
+              <p className="lbl">Lights checked</p>
+              <p className="num mt-1.5 text-[24px] font-bold leading-none">{summary.totalLightsChecked.toLocaleString("en-IN")}</p>
+            </div>
+            <div className="border-l border-[var(--border-subtle)] px-5 py-4 sm:border-l-0 sm:border-r">
+              <p className="lbl">Faulty</p>
+              <p className="num mt-1.5 text-[24px] font-bold leading-none" style={summary.faultyLightsCount > 0 ? { color: "var(--warn-fg)" } : undefined}>
+                {summary.faultyLightsCount}
+                <span className="ml-1.5 font-sans text-[14px] font-medium text-[var(--text-subtle)]">· {summary.faultyPct.toFixed(1)}%</span>
+              </p>
+            </div>
+            <div className="col-span-2 border-t border-[var(--border-subtle)] px-5 py-4 sm:border-t-0">
+              <p className="lbl">Inspector&apos;s note</p>
+              <p className="mt-1.5 text-[14px] leading-relaxed">{inspection.notes || <span className="text-[var(--text-subtle)]">No note.</span>}</p>
+              {noteMismatch && (
+                <p className="mt-1.5 text-[12.5px]" style={{ color: "var(--warn-fg)" }}>
+                  {noteMismatch}
+                </p>
+              )}
+            </div>
+          </section>
 
           {!inspection.voidedAt && (
-            <Card className="mb-6 p-4 sm:p-6">
+            <Card className="mb-6 p-4 sm:p-5">
               <CardTitle>Report</CardTitle>
               <InspectionReportSteps
                 inspectionId={inspection.id}
@@ -226,8 +253,8 @@ export default async function InspectionDetailPage({
           <Card className="p-4 sm:p-6">
             <CardTitle>Faulty or notable fixtures</CardTitle>
             {inspection.findings.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                No faults found on this visit.
+              <p className="rounded-[var(--r-sm)] border border-dashed border-[var(--border)] px-4 py-3 text-sm" style={{ color: "var(--text-muted)" }}>
+                No faults recorded on this visit.
               </p>
             ) : (
               <div className="space-y-2.5">
@@ -258,16 +285,7 @@ export default async function InspectionDetailPage({
         </>
       )}
 
-      {!inspection.voidedAt && (
-        <div className="mt-6 flex flex-wrap items-center gap-4">
-          {inspection.totalLightsChecked !== null && !isEditing && (
-            <Link href={`/admin/inspections/${inspection.id}?edit=1`} className="btn-secondary btn-sm">
-              Edit this inspection
-            </Link>
-          )}
-          {isOperations(actor.team) && <VoidInspectionButton id={inspection.id} />}
-        </div>
-      )}
+
     </>
   );
 }

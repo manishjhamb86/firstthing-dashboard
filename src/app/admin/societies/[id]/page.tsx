@@ -193,6 +193,10 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
 
   const sharedDocs = await societyDocuments(society.id);
   const docCount = sharedDocs.rows.length + (sharedDocs.agreement ? 1 : 0);
+  const kycWanted = kycDocumentsWanted(bestKycAcross(society.pipelines.flatMap((p) => p.kycRequirements), ""), {
+    gstNumber: society.gstNumber,
+    electricityUnitRate: society.electricityUnitRate,
+  });
 
   return (
     <>
@@ -288,28 +292,37 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
       {/* KYC documents the society still owes (kyc-society.ts): the number is
           on record so the deal moved on, but the paper has not been filed —
           said here, where the society is, with the route to file it. */}
-      {kycDocumentsWanted(bestKycAcross(society.pipelines.flatMap((p) => p.kycRequirements), ""), {
-        gstNumber: society.gstNumber,
-        electricityUnitRate: society.electricityUnitRate,
-      }).map((type) => (
+      {kycWanted.length > 0 && (
+        // One slim strip, not a banner per document (2026-11-28, user-asked).
         <div
-          key={type}
-          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--r-md)] border p-3 text-sm"
+          role="status"
+          className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[var(--r-sm)] border py-2 pl-3.5 pr-2.5 text-[13px]"
           style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
         >
-          <span>
-            {type === "gst_certificate"
-              ? `GST certificate not uploaded yet — GSTIN ${society.gstNumber} is on record, the certificate is not.`
-              : `Electricity bill not uploaded yet — the tariff (₹${society.electricityUnitRate}/kWh) is on record, the bill is not.`}
+          <span className="font-bold">
+            {kycWanted.length === 1
+              ? `${kycWanted[0] === "gst_certificate" ? "GST certificate" : "Electricity bill"} to upload`
+              : `${kycWanted.length} KYC documents to upload`}
           </span>
-          <Link
-            href={`/admin/documents?type=${type === "gst_certificate" ? "kycGstCertificate" : "kycElectricityBill"}&societyId=${society.id}`}
-            className="btn-secondary btn-sm"
-          >
-            Upload {type === "gst_certificate" ? "GST certificate" : "electricity bill"}
-          </Link>
+          {kycWanted.map((type) => (
+            <span key={type} className="inline-flex flex-wrap items-center gap-2">
+              <span>
+                <span className="font-semibold">{type === "gst_certificate" ? "GST certificate" : "Electricity bill"}</span>
+                <span className="opacity-80">
+                  {type === "gst_certificate" ? ` · GSTIN ${society.gstNumber} on record` : ` · ₹${society.electricityUnitRate}/kWh on record`}
+                </span>
+              </span>
+              <Link
+                href={`/admin/documents?type=${type === "gst_certificate" ? "kycGstCertificate" : "kycElectricityBill"}&societyId=${society.id}`}
+                className="rounded-full border bg-[var(--surface)] px-2.5 py-0.5 text-[12.5px] font-semibold text-[var(--accent)]"
+                style={{ borderColor: "var(--warn-line)" }}
+              >
+                Upload
+              </Link>
+            </span>
+          ))}
         </div>
-      ))}
+      )}
 
       {/* The one thing this page was missing: where the work is. One
           callout per open deal, so a society running two service lines does

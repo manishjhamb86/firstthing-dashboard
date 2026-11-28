@@ -42,8 +42,12 @@ export function inventoryByCategory(input: {
   for (const f of input.fittings) {
     rows.push({ key: `light:${f.fitting}`, name: f.fitting, demo: f.demo, full: f.full, installed: f.count, unit: "pcs", group: "Lighting" });
   }
+  // A kind already counted from its connected devices (a meter, a tank
+  // sensor) is not listed a second time as an empty stock line.
+  const countedByDevice = (st: (typeof input.stock)[number]) =>
+    (input.meters > 0 && st.category === "meter") || (input.sensors > 0 && /tank/i.test(st.name));
   for (const s of input.stock) {
-    if (s.installed <= 0 && !input.includeUnrecorded) continue;
+    if (s.installed <= 0 && (!input.includeUnrecorded || countedByDevice(s))) continue;
     rows.push({
       key: `stock:${s.id}`,
       name: s.name,

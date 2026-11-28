@@ -16,6 +16,15 @@ const base = {
 };
 
 describe("inventory by category", () => {
+  it("does not list an empty stock meter beside a connected one", () => {
+    const { groups } = inventoryByCategory({
+      ...base,
+      stock: [...base.stock, { id: "m", name: "Smart meter", unit: "pcs", category: "meter", installed: 0 }],
+      includeUnrecorded: true,
+    });
+    expect(groups.find((g) => g.title === "Metering")!.rows.map((r) => r.name)).toEqual(["Smart energy meter"]);
+  });
+
   it("lists each light type with demo and full installation", () => {
     const { groups } = inventoryByCategory({ ...base, includeUnrecorded: false });
     expect(groups[0]).toEqual({
